@@ -1,5 +1,9 @@
 # Zhihu++ Agent Instructions
 
+> **本 fork 优先读 [AGENTS.md](AGENTS.md)。** 它是本魔改分支的首要指南，并说明了下文（上游维护者规则）哪些适用、哪些不适用；两者冲突时以 AGENTS.md 为准。
+
+@AGENTS.md
+
 本项目是隐私增强的知乎 Android 客户端，支持本地推荐算法、广告屏蔽、内容过滤。
 
 ## 经验总结
