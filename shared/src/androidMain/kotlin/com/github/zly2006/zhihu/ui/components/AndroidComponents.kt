@@ -108,6 +108,8 @@ class OpenImageDialog(
     }
 }
 
+actual val feedKeywordExtractionAvailable: Boolean = true
+
 actual suspend fun extractFeedKeywords(
     title: String,
     excerpt: String?,

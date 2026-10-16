@@ -20,6 +20,7 @@
 import buildlogic.gitHash
 import org.gradle.api.tasks.testing.Test
 import org.gradle.jvm.toolchain.JavaLanguageVersion
+import java.util.Properties
 import kotlin.io.encoding.Base64
 import kotlin.io.encoding.ExperimentalEncodingApi
 
@@ -53,28 +54,23 @@ android {
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.github.zly2006.zhplus"
+        applicationId = "com.github.zly2006.zhplus.jev"
         minSdk = 27
         targetSdk = 35
         versionCode = property("app.versionCode").toString().toIntOrNull() ?: 1
         versionName = property("app.versionName").toString()
 
-        testInstrumentationRunner = "com.github.zly2006.zhihu.ZhihuInstrumentedTestRunner"
-    }
+        val typesafeApiKey =
+            rootProject
+                .file("local.properties")
+                .takeIf { it.exists() }
+                ?.let { file -> Properties().apply { file.inputStream().use { load(it) } } }
+                ?.getProperty("typesafe.apiKey")
+                ?: System.getenv("TYPESAFE_API_KEY")
+                ?: ""
+        buildConfigField("String", "TYPESAFE_API_KEY", "\"$typesafeApiKey\"")
 
-    flavorDimensions += "version"
-    productFlavors {
-        create("full") {
-            dimension = "version"
-            buildConfigField("boolean", "IS_LITE", "false")
-        }
-        create("lite") {
-            dimension = "version"
-            isDefault = true
-            buildConfigField("boolean", "IS_LITE", "true")
-            applicationIdSuffix = ".lite"
-//            versionNameSuffix = "-lite"
-        }
+        testInstrumentationRunner = "com.github.zly2006.zhihu.ZhihuInstrumentedTestRunner"
     }
 
     androidResources {
@@ -148,21 +144,6 @@ android {
                     "DebugProbesKt.bin",
 //                    "META-INF/*.kotlin_module",
                 )
-        }
-    }
-
-    androidComponents {
-        beforeVariants(selector().all()) { variantBuilder ->
-            val flavorName = variantBuilder.flavorName
-            if (variantBuilder.buildType == "release") {
-                val minify =
-                    when (flavorName) {
-                        "lite" -> true
-                        else -> false
-                    }
-                variantBuilder.isMinifyEnabled = minify
-                variantBuilder.shrinkResources = minify
-            }
         }
     }
 }
@@ -249,14 +230,10 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("com.mikepenz:aboutlibraries-compose-m3:$aboutLibraries")
-    "fullImplementation"(project(":sentence_embeddings"))
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
     androidTestImplementation(platform("androidx.compose:compose-bom:2026.06.00"))
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
-
-    // HanLP for Chinese NLP
-    "fullImplementation"("com.hankcs:hanlp:portable-1.8.6")
 
     testImplementation("junit:junit:4.13.2")
     testImplementation("io.ktor:ktor-client-cio:$ktor")

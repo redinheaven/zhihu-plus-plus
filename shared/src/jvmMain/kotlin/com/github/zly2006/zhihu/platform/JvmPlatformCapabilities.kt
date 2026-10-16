@@ -225,8 +225,6 @@ actual fun PlatformPredictiveBackHandler(
     onBack: () -> Unit,
 ) = PlatformBackHandler(enabled = enabled, onBack = onBack)
 
-actual val isLiteVariant: Boolean = false
-
 internal actual val platformBottomBarItemLimit: Int? = null
 
 actual val platformName: String = "JVM"
@@ -238,8 +236,6 @@ actual val isNative: Boolean = false
 actual val isAigcVoteSupported: Boolean = false
 
 actual val isBlocklistNlpSupported: Boolean = false
-
-actual val isSentenceSimilaritySupported: Boolean = false
 
 actual val isArticleHtmlExportSupported: Boolean = true
 

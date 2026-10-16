@@ -149,15 +149,11 @@ actual fun Modifier.exportTestTagsForUiAutomation(): Modifier = this
 @Composable
 actual fun rememberAppPrivateDirectory(): Path = remember { Path(nativeAppPrivateDirectoryPath()) }
 
-actual val isLiteVariant: Boolean = false
-
 actual val isJvm: Boolean = false
 
 actual val isNative: Boolean = true
 
 actual val isBlocklistNlpSupported: Boolean = false
-
-actual val isSentenceSimilaritySupported: Boolean = false
 
 actual val isArticleHtmlExportSupported: Boolean = false
 

@@ -82,7 +82,6 @@ import com.github.zly2006.zhihu.data.DailySection
 import com.github.zly2006.zhihu.data.DailyStory
 import com.github.zly2006.zhihu.navigation.LocalNavigator
 import com.github.zly2006.zhihu.navigation.resolveContent
-import com.github.zly2006.zhihu.platform.isLiteVariant
 import com.github.zly2006.zhihu.ui.components.pageTurnViewportWithGuide
 import com.github.zly2006.zhihu.ui.components.rememberPageTurnTarget
 import com.github.zly2006.zhihu.util.formatDailyDate
@@ -126,7 +125,7 @@ fun DailyScreen(
     val listState = rememberLazyListState()
     val pageTurnTarget = rememberPageTurnTarget(
         listState = listState,
-        enabled = isActive && (isLiteVariant || !showDatePicker) && missingOriginStoryUrl == null,
+        enabled = isActive && !showDatePicker && missingOriginStoryUrl == null,
     )
     var cachedScrollToTopTrigger by remember { mutableIntStateOf(scrollToTopTrigger) }
     LaunchedEffect(listState, viewModel.sections) {
@@ -161,18 +160,16 @@ fun DailyScreen(
         }
     }
 
-    if (!isLiteVariant) {
-        LaunchedEffect(showDatePicker, pendingDateSelection) {
-            if (showDatePicker) return@LaunchedEffect
-            val selectedDate = pendingDateSelection ?: return@LaunchedEffect
-            // DatePickerDialog is hosted in a platform window. Delay page replacement until the closing
-            // dialog has yielded its focus and measure work back to the main content window.
-            withFrameNanos { }
-            viewModel.loadDate(httpClient, selectedDate)
-            listState.scrollToItem(0)
-            if (pendingDateSelection == selectedDate) {
-                pendingDateSelection = null
-            }
+    LaunchedEffect(showDatePicker, pendingDateSelection) {
+        if (showDatePicker) return@LaunchedEffect
+        val selectedDate = pendingDateSelection ?: return@LaunchedEffect
+        // DatePickerDialog is hosted in a platform window. Delay page replacement until the closing
+        // dialog has yielded its focus and measure work back to the main content window.
+        withFrameNanos { }
+        viewModel.loadDate(httpClient, selectedDate)
+        listState.scrollToItem(0)
+        if (pendingDateSelection == selectedDate) {
+            pendingDateSelection = null
         }
     }
 
@@ -200,7 +197,7 @@ fun DailyScreen(
         cachedScrollToTopTrigger = scrollToTopTrigger
     }
 
-    if (!isLiteVariant && showDatePicker) {
+    if (showDatePicker) {
         val datePickerState = rememberDatePickerState(
             initialSelectedDateMillis = Clock.System.now().toEpochMilliseconds(),
         )
@@ -266,13 +263,11 @@ fun DailyScreen(
                     }
                 },
                 actions = {
-                    if (!isLiteVariant) {
-                        IconButton(
-                            onClick = { showDatePicker = true },
-                            modifier = Modifier.testTag(DAILY_SCREEN_DATE_PICKER_BUTTON_TAG),
-                        ) {
-                            Icon(Icons.Filled.DateRange, contentDescription = "选择日期")
-                        }
+                    IconButton(
+                        onClick = { showDatePicker = true },
+                        modifier = Modifier.testTag(DAILY_SCREEN_DATE_PICKER_BUTTON_TAG),
+                    ) {
+                        Icon(Icons.Filled.DateRange, contentDescription = "选择日期")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(

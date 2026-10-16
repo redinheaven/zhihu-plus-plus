@@ -200,9 +200,6 @@ actual fun rememberOpenSourceLicensesLibraries(): Libs = remember {
         } ?: Libs(emptyList(), emptySet())
 }
 
-@Composable
-actual fun rememberShowFullVariantLicenses(): Boolean = false
-
 private fun loadDesktopAboutLibrariesJson(): String? {
     val resourceJson = Thread
         .currentThread()

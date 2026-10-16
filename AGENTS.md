@@ -6,7 +6,7 @@
 
 Zhihu++ 是注重隐私、无广告的第三方知乎客户端，基于 Kotlin Multiplatform + Compose Multiplatform：
 
-- Android 为主，提供 `full`（含端侧 ONNX/embedding NLP 过滤）和 `lite`（约 4 MB）两个 flavor。
+- Android 为主。上游分 `full`（端侧 text2vec 模型）和 `lite` 两个 flavor；**本 fork 已合并为单一的「Jev 版」**，AI 屏蔽和关键词提取改为调用 TypeSafe Jev，见「魔改记录」。
 - 实验性桌面端（JVM，Windows MSI / Linux AppImage）、macOS 原生（Kotlin/Native）以及 iOS target。
 - 核心卖点：本地推荐算法（爬虫 + 本地打分，独立于知乎推荐）、屏蔽词 / NLP 屏蔽 / 屏蔽用户与话题、去盐选、zse96 v2 签名调用 Web API、模拟 Android API。
 - 许可证：AGPL-3.0（仅 v3）。魔改后分发二进制时必须同时提供源码，保留版权头。
@@ -17,16 +17,15 @@ Zhihu++ 是注重隐私、无广告的第三方知乎客户端，基于 Kotlin M
 
 | 路径 | 说明 |
 | --- | --- |
-| `app/` | Android 应用壳。`src/main` 公共，`src/full` / `src/lite` 为 flavor 专属，`src/androidTest` 为 instrument test |
+| `app/` | Android 应用壳。`src/main` 为全部代码（无 flavor），`src/androidTest` 为 instrument test |
 | `shared/` | KMP 共享模块，绝大部分业务和 UI 都在这里 |
 | `shared/src/commonMain/kotlin/com/github/zly2006/zhihu/` | 跨平台核心代码（见下表） |
-| `shared/src/androidMain` / `androidFull` / `androidLite` | Android 共用 `actual` / full 专属 / lite 专属 |
+| `shared/src/androidMain` | Android `actual` 实现（含 `tiqianMarkdownMain` 渲染器） |
 | `shared/src/jvmMain` | 桌面端 `actual` 与桌面入口相关实现 |
 | `shared/src/macosMain` / `iosMain` / `nativeMain` | Apple 平台实现 |
 | `shared-local-db/` | 本地数据库（KMP） |
 | `desktopApp/` | 桌面端入口，`mainClass = com.github.zly2006.zhihu.desktop.MainKt` |
 | `macosApp/`, `macosUiDebug/` | macOS 原生宿主与离屏 UI 调试器 |
-| `sentence_embeddings/` + `rs-hf-tokenizer/` | full 版 NLP：Kotlin 封装 + Rust tokenizer（需 `cargo-ndk`） |
 | `rs-zse-sign/` | zse 签名算法的 Rust 实现（独立 crate） |
 | `aigc-vote-server/` | AIGC 标记投票后端（Rust，有自己的 `AGENTS.md`） |
 | `apk-recompress/` | APK 重压缩工具（Rust） |
@@ -54,10 +53,9 @@ Zhihu++ 是注重隐私、无广告的第三方知乎客户端，基于 Kotlin M
 ## 构建与验证
 
 ```bash
-# Android（full 与 lite 必须分开两次 Gradle 调用，不能写在同一条命令里）
-./gradlew :app:assembleLiteDebug     # 产物 app/build/outputs/apk/lite/debug/
-./gradlew :app:assembleFullDebug     # 需要 Rust + cargo-ndk + NDK
-./gradlew :app:testLiteDebugUnitTest # 单元测试同样按 flavor 分开，不要用全局 test
+# Android（单一版本，无 flavor）
+./gradlew :app:assembleDebug         # 产物 app/build/outputs/apk/debug/app-debug.apk
+./gradlew :app:testDebugUnitTest
 
 # 桌面端
 ./gradlew :desktopApp:run
@@ -76,10 +74,11 @@ Zhihu++ 是注重隐私、无广告的第三方知乎客户端，基于 Kotlin M
   - Android SDK：`ANDROID_HOME=C:\Users\wugao\AppData\Local\Android\Sdk`，仅装了 command-line tools、`platform-tools`（已加入 PATH，含 `adb`）、`platforms/android-37.0`、`build-tools/37.0.0`；没有装 Android Studio、模拟器和 NDK；
   - 仓库根目录 `local.properties` 已写入 `sdk.dir`（git 已忽略，不入库）。
 - 新版 `sdkmanager` 包名用 `/` 分隔，例如 `sdkmanager "platforms/android-37.0"`，旧的 `;` 写法会报 `Package not found`。
-- 未安装 Rust / `cargo-ndk` / NDK / `gh`：仅构建 full 版或改 Rust 时才需要，只做 lite 魔改可以跳过。
+- 未安装 Rust / `cargo-ndk` / NDK / `gh`：Android 构建已不需要 Rust，仅改其他 Rust crate 时才需要。
+- Jev 的 API Key 在构建时从 `local.properties` 的 `typesafe.apiKey`（或环境变量 `TYPESAFE_API_KEY`）读取并打进 APK，`local.properties` 不入库。
 - 仓库 `core.symlinks=false`，上游的符号链接在 Windows 上会被检出为内容是目标路径的普通文本文件，修改这类文件时注意不要误提交类型变更。
 - **本机只有 7.9 GB 内存 / 4 线程**，项目默认的 Gradle 4 GB + Kotlin 3 GB + 并行编译会让机器卡死。已在 `C:\Users\wugao\.gradle\gradle.properties` 用本机设置覆盖为 Gradle 2 GB、Kotlin 1.5 GB、关闭并行、最多 2 个 worker、守护进程闲置 10 分钟自动退出。不要修改仓库内 `gradle.properties` 的内存参数（会与上游冲突），也不要删除本机覆盖。
-- 编译耗时长（首次 lite debug 约 30 分钟），agent 不应在用户未要求时主动启动完整编译；编译结束后执行 `./gradlew --stop` 释放内存。
+- 编译耗时长（首次 debug 约 20～30 分钟），agent 不应在用户未要求时主动启动完整编译；编译结束后执行 `./gradlew --stop` 释放内存。
 - Gradle 配置缓存和构建缓存默认开启；改了构建脚本后遇到奇怪问题可加 `--no-configuration-cache` 排查。
 - 新开 git worktree 时把 `local.properties` 一并复制过去。
 
@@ -94,7 +93,7 @@ Zhihu++ 是注重隐私、无广告的第三方知乎客户端，基于 Kotlin M
 ### KMP 与平台边界
 - 平台差异用细粒度 `expect/actual` 表达；单项能力用 `is...Supported`。不支持的平台要 fail-fast 或明确禁用，不能用低质量替代实现冒充。
 - 共享 UI 只有一套：新平台只替换宿主和平台能力，不复制页面。
-- full / lite 差异放在 `shared/src/androidFull`、`androidLite` 和 `app/src/full`、`app/src/lite`，公共逻辑不要写进 flavor 目录。
+- 本 fork 不再有 full / lite flavor，不要重新引入 flavor 目录。
 
 ### UI
 - Compose Material 3；副作用用 `LaunchedEffect`（key 要正确），Flow 用 `collectAsState()`，前台刷新用 `repeatOnLifecycle`。
@@ -123,7 +122,7 @@ Zhihu++ 是注重隐私、无广告的第三方知乎客户端，基于 Kotlin M
    ```
    魔改尽量集中在少数文件 / 新增文件中，减少与上游的冲突面；合并上游前先确认本地改动已提交。
 2. **分支**：在 `master` 之外开功能分支开发，分支基于最新 `master`，不要混入其他功能分支内容。
-3. **包名 / 品牌**：如需与官方 Zhihu++ 共存安装，修改 `app/build.gradle.kts` 中的 `applicationId`（当前 `com.github.zly2006.zhplus`，lite 加 `.lite` 后缀）；`namespace` 和 Kotlin 包名 `com.github.zly2006.zhihu` 不必改，改了会产生大量无意义冲突。
+3. **包名 / 品牌**：如需与官方 Zhihu++ 共存安装，修改 `app/build.gradle.kts` 中的 `applicationId`（本 fork 已改为 `com.github.zly2006.zhplus.jev`，应用名「知乎++ Jev」）；`namespace` 和 Kotlin 包名 `com.github.zly2006.zhihu` 不必改，改了会产生大量无意义冲突。
 4. **遥测与在线服务**：上游包含匿名遥测、在线通知、更新检查和 AIGC 投票服务，均指向上游服务器。魔改版若不使用这些服务，应明确关闭或改指向，而不是悄悄保留向上游上报。
 5. **签名**：Release 签名读取环境变量 `signingKey` 等（见 `app/build.gradle.kts` 的 `signingConfigs`），不要把密钥写进仓库。
 6. **提交**：commit / PR 标题以 `feat:` / `fix:` / `refactor:` 开头，正文用中文。`feat` / `fix` 按相对基线的产品变化判定：新增用户可见行为是 `feat`，既有行为回归才是 `fix`。未经用户确认不要 commit 或 push。
@@ -142,13 +141,13 @@ Zhihu++ 是注重隐私、无广告的第三方知乎客户端，基于 Kotlin M
 
 ## Android 设备验证（可选）
 
-需要设备验证时使用 AVD，不用真机。lite 包名 `com.github.zly2006.zhplus.lite`：
+需要设备验证时使用 AVD，不用真机。包名 `com.github.zly2006.zhplus.jev`：
 
 ```bash
-./gradlew :app:assembleLiteDebug
-adb install -r app/build/outputs/apk/lite/debug/app-lite-debug.apk
-adb shell am force-stop com.github.zly2006.zhplus.lite
-adb shell monkey -p com.github.zly2006.zhplus.lite -c android.intent.category.LAUNCHER 1
+./gradlew :app:assembleDebug
+adb install -r app/build/outputs/apk/debug/app-debug.apk
+adb shell am force-stop com.github.zly2006.zhplus.jev
+adb shell monkey -p com.github.zly2006.zhplus.jev -c android.intent.category.LAUNCHER 1
 ```
 
 UI 交互优先使用 `.agents/skills/ui-test/llm_test_helper.py` 的 `dump` / `tap --text/--tag/--desc`，先 dump 再操作，避免硬编码坐标。若启动后出现「下载官方App」或知乎网页安全验证页，说明登录态失效，按 `.agents/skills/launch-on-device/SKILL.md` 恢复 `files/account.json`。
@@ -158,3 +157,7 @@ UI 交互优先使用 `.agents/skills/ui-test/llm_test_helper.py` 的 `dump` / `
 在此记录本 fork 相对上游的改动，便于后续合并上游时核对：
 
 - 精确屏蔽词新增匹配范围（全部 / 仅标题 / 仅作者名），数据库升到 v8。
+- **Jev 版**：删除 full / lite flavor、`sentence_embeddings`、`rs-hf-tokenizer`、HanLP 与 text2vec 模型下载；`app/src/main/.../nlp/Jev.kt` 用 TypeSafe Jev 的 noul 判断题实现 AI 主题屏蔽和「按关键词屏蔽」的关键词挑选（候选词由系统 ICU 分词生成）。原 full 专属的提椠 Markdown 渲染器和日报日期选择器保留。
+- applicationId 改为 `com.github.zly2006.zhplus.jev`，应用名「知乎++ Jev」，可与官方版共存。
+- 关闭更新检查（上游 release 不含 Jev 版）：去掉启动时自动检查、设置页的检查更新按钮、Nightly 开关和 GitHub Token 项；`updater/` 代码仍在但不再被触发。
+- 上游 CI（`.github/workflows`）仍按 full / lite 构建并发布到上游 release，本 fork 未改，不要直接启用。

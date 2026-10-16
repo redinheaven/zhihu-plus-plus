@@ -22,8 +22,6 @@ import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -47,7 +45,6 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -62,7 +59,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -75,9 +71,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.github.zly2006.zhihu.nlp.ModelState
-import com.github.zly2006.zhihu.nlp.NLPService
-import com.github.zly2006.zhihu.nlp.SentenceEmbeddingManager
+import com.github.zly2006.zhihu.BuildConfig
+import com.github.zly2006.zhihu.platform.androidSettingsStore
 import com.github.zly2006.zhihu.viewmodel.filter.BlockedContentRecord
 import com.github.zly2006.zhihu.viewmodel.filter.BlockedKeyword
 import com.github.zly2006.zhihu.viewmodel.filter.KeywordType
@@ -93,10 +88,8 @@ import kotlinx.serialization.json.Json
 private const val NLP_KEYWORD_MANAGEMENT_TAG = "NLPKeywordManagement"
 
 /**
- * NLP关键词管理界面
- * 支持从文本中提取关键词，并添加到屏蔽列表
+ * AI 屏蔽主题管理界面，判断由 Jev 完成
  */
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun NLPKeywordManagementScreen(
     innerPadding: PaddingValues,
@@ -105,21 +98,12 @@ fun NLPKeywordManagementScreen(
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
     val database = remember(context) { getContentFilterDatabase(context) }
-    val modelState by SentenceEmbeddingManager.state.collectAsState()
-
-    var isExtracting by remember { mutableStateOf(false) }
-
-    LaunchedEffect(context) {
-        SentenceEmbeddingManager.setDefaultContext(context.applicationContext)
-    }
 
     var selectedTab by remember { mutableIntStateOf(0) }
-    val tabs = listOf("NLP短语管理", "被屏蔽记录")
+    val tabs = listOf("屏蔽主题", "被屏蔽记录")
 
     var blockedKeywords by remember { mutableStateOf<List<BlockedKeyword>>(emptyList()) }
     var blockedRecords by remember { mutableStateOf<List<BlockedContentRecord>>(emptyList()) }
-    var extractedKeywords by remember { mutableStateOf<List<String>>(emptyList()) }
-    var inputText by remember { mutableStateOf("") }
     var similarityThreshold by remember {
         mutableFloatStateOf(context.contentFilterSettings().nlpSimilarityThreshold.toFloat())
     }
@@ -173,52 +157,10 @@ fun NLPKeywordManagementScreen(
             when (selectedTab) {
                 0 -> NLPPhraseManagementTab(
                     blockedKeywords = blockedKeywords,
-                    extractedKeywords = extractedKeywords,
-                    inputText = inputText,
                     similarityThreshold = similarityThreshold,
-                    onInputTextChange = { inputText = it },
-                    onSimilarityThresholdChange = { similarityThreshold = it },
-                    onExtractKeywords = {
-                        coroutineScope.launch {
-                            if (inputText.isBlank()) {
-                                Toast.makeText(context, "请输入文本", Toast.LENGTH_SHORT).show()
-                                return@launch
-                            }
-                            isExtracting = true
-                            try {
-                                extractedKeywords = NLPService.extractKeywords(inputText, 10)
-                                if (extractedKeywords.isEmpty()) {
-                                    Toast.makeText(context, "未能提取到关键词", Toast.LENGTH_SHORT).show()
-                                }
-                            } catch (e: Exception) {
-                                Log.e(NLP_KEYWORD_MANAGEMENT_TAG, "Extract NLP keywords failed", e)
-                                Toast.makeText(context, "提取失败: ${e.message}", Toast.LENGTH_SHORT).show()
-                            } finally {
-                                isExtracting = false
-                            }
-                        }
-                    },
-                    onAddAllKeywords = {
-                        coroutineScope.launch {
-                            try {
-                                // 将所有关键词组合成一个短语
-                                val phrase = extractedKeywords.joinToString(" ")
-                                withContext(Dispatchers.IO) {
-                                    database.blockedKeywordDao().insertKeyword(
-                                        BlockedKeyword(
-                                            keyword = phrase.trim(),
-                                            keywordType = KeywordType.NLP_SEMANTIC.name,
-                                        ),
-                                    )
-                                }
-                                Toast.makeText(context, "已添加短语: $phrase", Toast.LENGTH_SHORT).show()
-                                loadData()
-                                extractedKeywords = emptyList()
-                            } catch (e: Exception) {
-                                Log.e(NLP_KEYWORD_MANAGEMENT_TAG, "Add extracted NLP phrase failed", e)
-                                Toast.makeText(context, "添加失败: ${e.message}", Toast.LENGTH_SHORT).show()
-                            }
-                        }
+                    onSimilarityThresholdChange = {
+                        similarityThreshold = it
+                        androidSettingsStore(context).putFloat("nlpSimilarityThreshold", it)
                     },
                     onShowAddDialog = { showAddDialog = true },
                     onEditKeyword = { keyword ->
@@ -244,9 +186,9 @@ fun NLPKeywordManagementScreen(
                         coroutineScope.launch {
                             try {
                                 withContext(Dispatchers.IO) {
-                                    database.blockedKeywordDao().clearAllKeywords()
+                                    blockedKeywords.forEach { database.blockedKeywordDao().deleteKeyword(it) }
                                 }
-                                Toast.makeText(context, "已清空所有NLP短语", Toast.LENGTH_SHORT).show()
+                                Toast.makeText(context, "已清空所有屏蔽主题", Toast.LENGTH_SHORT).show()
                                 loadData()
                             } catch (e: Exception) {
                                 Log.e(NLP_KEYWORD_MANAGEMENT_TAG, "Clear NLP keywords failed", e)
@@ -254,25 +196,6 @@ fun NLPKeywordManagementScreen(
                             }
                         }
                     },
-                    modelState = modelState,
-                    onLoadModel = {
-                        coroutineScope.launch {
-                            try {
-                                SentenceEmbeddingManager.ensureModel(context)
-                                Toast.makeText(context, "模型已加载", Toast.LENGTH_SHORT).show()
-                            } catch (e: Exception) {
-                                Log.e(NLP_KEYWORD_MANAGEMENT_TAG, "Load NLP model failed", e)
-                                Toast.makeText(context, "模型加载失败: ${e.message}", Toast.LENGTH_SHORT).show()
-                            }
-                        }
-                    },
-                    onUnloadModel = {
-                        coroutineScope.launch {
-                            SentenceEmbeddingManager.unload()
-                            Toast.makeText(context, "已卸载模型", Toast.LENGTH_SHORT).show()
-                        }
-                    },
-                    isModelBusy = isExtracting,
                 )
                 1 -> BlockedRecordsTab(
                     records = blockedRecords,
@@ -324,7 +247,7 @@ fun NLPKeywordManagementScreen(
                                 ),
                             )
                         }
-                        Toast.makeText(context, "已添加短语", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "已添加主题", Toast.LENGTH_SHORT).show()
                         loadData()
                         showAddDialog = false
                     } catch (e: Exception) {
@@ -351,7 +274,7 @@ fun NLPKeywordManagementScreen(
                         withContext(Dispatchers.IO) {
                             database.blockedKeywordDao().insertKeyword(updated)
                         }
-                        Toast.makeText(context, "已更新短语", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "已更新主题", Toast.LENGTH_SHORT).show()
                         loadData()
                         showEditDialog = false
                         keywordToEdit = null
@@ -365,84 +288,21 @@ fun NLPKeywordManagementScreen(
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun NLPPhraseManagementTab(
     blockedKeywords: List<BlockedKeyword>,
-    extractedKeywords: List<String>,
-    inputText: String,
     similarityThreshold: Float,
-    onInputTextChange: (String) -> Unit,
     onSimilarityThresholdChange: (Float) -> Unit,
-    onExtractKeywords: () -> Unit,
-    onAddAllKeywords: () -> Unit,
     onShowAddDialog: () -> Unit,
     onEditKeyword: (BlockedKeyword) -> Unit,
     onDeleteKeyword: (BlockedKeyword) -> Unit,
     onClearAll: () -> Unit,
-    modelState: ModelState,
-    onLoadModel: () -> Unit,
-    onUnloadModel: () -> Unit,
-    isModelBusy: Boolean,
 ) {
     LazyColumn(
         modifier = Modifier.fillMaxWidth(),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
-        item {
-            Card {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Text(
-                        "Transformer 模型",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    val statusText = when (modelState) {
-                        ModelState.Uninitialized -> "当前状态：未加载"
-                        ModelState.Loading -> "当前状态：正在加载"
-                        ModelState.Ready -> "当前状态：已就绪"
-                        is ModelState.Error -> "当前状态：加载失败"
-                        is ModelState.Downloading -> "当前状态：下载中 ${modelState.progress}%"
-                    }
-                    Text(statusText, style = MaterialTheme.typography.bodyMedium)
-                    if (modelState is ModelState.Error) {
-                        Text(
-                            text = modelState.message,
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                    }
-                    if (isModelBusy) {
-                        Text(
-                            text = "提示：正在进行关键词任务，卸载暂不可用",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    ) {
-                        Button(
-                            onClick = onLoadModel,
-                            enabled = modelState !is ModelState.Loading && modelState !is ModelState.Ready,
-                        ) {
-                            Text(if (modelState is ModelState.Loading) "加载中..." else "加载模型")
-                        }
-                        TextButton(
-                            onClick = onUnloadModel,
-                            enabled = modelState is ModelState.Ready && !isModelBusy,
-                        ) {
-                            Text("卸载模型")
-                        }
-                    }
-                }
-            }
-        }
-
         // 说明卡片
         item {
             Card(
@@ -454,124 +314,50 @@ fun NLPPhraseManagementTab(
                     modifier = Modifier.padding(16.dp),
                 ) {
                     Text(
-                        "NLP智能屏蔽",
+                        "AI 智能屏蔽（Jev）",
                         style = MaterialTheme.typography.titleMedium,
                         color = MaterialTheme.colorScheme.onPrimaryContainer,
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        "基于自然语言处理技术，通过组合多个关键词成短语来表达与逻辑。例如：\"政治 敏感\" 将匹配同时包含这两个主题的内容。",
+                        "每条内容会联网交给 TypeSafe Jev 模型判断是否属于你设置的主题。主题用一句话描述效果最好，例如：\"减肥方法和体重管理\"。",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onPrimaryContainer,
                     )
+                    if (BuildConfig.TYPESAFE_API_KEY.isEmpty()) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            "构建时未配置 TypeSafe API Key，AI 屏蔽不会生效",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
                 }
             }
         }
 
-        // 相似度阈值设置
+        // 判定阈值设置
         item {
             Card {
                 Column(
                     modifier = Modifier.padding(16.dp),
                 ) {
                     Text(
-                        "相似度阈值: ${String.format("%.2f", similarityThreshold)}",
+                        "判定阈值: ${String.format("%.2f", similarityThreshold)}",
                         style = MaterialTheme.typography.titleSmall,
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Slider(
                         value = similarityThreshold,
                         onValueChange = onSimilarityThresholdChange,
-                        valueRange = 0.1f..0.9f,
-                        steps = 15,
+                        valueRange = 0.5f..0.95f,
+                        steps = 8,
                     )
                     Text(
-                        "阈值越高，匹配越严格；阈值越低，匹配越宽松",
+                        "模型认为内容属于该主题的概率超过阈值时屏蔽。阈值越高越不容易误杀，越低越不容易漏掉",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                }
-            }
-        }
-
-        // 文本输入和关键词提取
-        item {
-            Card {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                ) {
-                    Text(
-                        "提取关键词",
-                        style = MaterialTheme.typography.titleSmall,
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    OutlinedTextField(
-                        value = inputText,
-                        onValueChange = onInputTextChange,
-                        label = { Text("输入文本") },
-                        placeholder = { Text("粘贴Feed内容或输入任意文本") },
-                        modifier = Modifier.fillMaxWidth(),
-                        minLines = 3,
-                        maxLines = 5,
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Button(
-                        onClick = onExtractKeywords,
-                        enabled = inputText.isNotBlank(),
-                        modifier = Modifier.align(Alignment.End),
-                    ) {
-                        Text("提取关键词")
-                    }
-                }
-            }
-        }
-
-        // 提取的关键词
-        if (extractedKeywords.isNotEmpty()) {
-            item {
-                Card {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                "提取的关键词",
-                                style = MaterialTheme.typography.titleSmall,
-                            )
-                            TextButton(onClick = onAddAllKeywords) {
-                                Text("组合为短语并添加")
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            "提示：所有关键词将用空格连接成一个短语",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        FlowRow(
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            extractedKeywords.forEach { keyword ->
-                                FilterChip(
-                                    selected = true,
-                                    onClick = { },
-                                    label = { Text(keyword) },
-                                )
-                            }
-                        }
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            "预览: ${extractedKeywords.joinToString(" ")}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    }
                 }
             }
         }
@@ -588,7 +374,7 @@ fun NLPPhraseManagementTab(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            "已屏蔽短语 (${blockedKeywords.size})",
+                            "屏蔽主题 (${blockedKeywords.size})",
                             style = MaterialTheme.typography.titleSmall,
                         )
                         Row {
@@ -617,13 +403,13 @@ fun NLPPhraseManagementTab(
                     horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
                     Text(
-                        "暂无NLP屏蔽短语",
+                        "暂无屏蔽主题",
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        "在上方提取关键词或手动添加",
+                        "点击上方「手动添加」",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -640,8 +426,6 @@ fun NLPPhraseManagementTab(
                     },
                     supportingContent = {
                         Column {
-                            val keywords = keyword.getNLPKeywords()
-                            Text("包含 ${keywords.size} 个关键词")
                             Text(
                                 "添加于 ${
                                     java.text.SimpleDateFormat("yyyy-MM-dd HH:mm", java.util.Locale.getDefault())
@@ -818,7 +602,7 @@ fun BlockedRecordItem(
 
                 // 显示匹配的关键词
                 Text(
-                    "匹配的关键词（前3个）",
+                    "命中的主题（前3个）",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary,
                 )
@@ -869,7 +653,7 @@ fun AddPhraseDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("手动添加NLP短语") },
+        title = { Text("添加屏蔽主题") },
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
@@ -877,14 +661,14 @@ fun AddPhraseDialog(
                 OutlinedTextField(
                     value = phrase,
                     onValueChange = { phrase = it },
-                    label = { Text("短语") },
-                    placeholder = { Text("用空格分隔多个关键词，如：政治 敏感") },
+                    label = { Text("主题") },
+                    placeholder = { Text("一句话描述，如：减肥方法和体重管理") },
                     modifier = Modifier.fillMaxWidth(),
                     minLines = 2,
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    "提示：用空格分隔多个关键词来表达与逻辑。例如：\"政治 敏感\" 将匹配同时包含这两个主题的内容。",
+                    "提示：描述越具体，判断越准。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -922,7 +706,7 @@ fun EditPhraseDialog(
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("编辑NLP短语") },
+        title = { Text("编辑屏蔽主题") },
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
@@ -930,14 +714,14 @@ fun EditPhraseDialog(
                 OutlinedTextField(
                     value = phrase,
                     onValueChange = { phrase = it },
-                    label = { Text("短语") },
-                    placeholder = { Text("用空格分隔多个关键词") },
+                    label = { Text("主题") },
+                    placeholder = { Text("一句话描述要屏蔽的主题") },
                     modifier = Modifier.fillMaxWidth(),
                     minLines = 2,
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    "提示：用空格分隔多个关键词来表达与逻辑。",
+                    "提示：描述越具体，判断越准。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

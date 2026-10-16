@@ -34,8 +34,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowOutward
-import androidx.compose.material.icons.filled.Visibility
-import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -68,8 +66,6 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.LinkAnnotation
 import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.input.PasswordVisualTransformation
-import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.withLink
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
@@ -109,7 +105,6 @@ fun SystemAndUpdateSettingsScreen(
 ) {
     val settings = rememberSettingsStore()
     val updateStateFlow = rememberSystemUpdateState()
-    val checkForUpdate = rememberSystemUpdateChecker()
     val skipUpdateVersion = rememberSystemUpdateVersionSkipper()
     val downloadUpdate = rememberSystemUpdateDownloader()
     val installDownloadedUpdate = rememberDownloadedSystemUpdateInstaller()
@@ -314,42 +309,7 @@ fun SystemAndUpdateSettingsScreen(
                 }
             }
 
-            // GitHub Token。
-            var githubToken by remember { mutableStateOf(settings.getString("githubToken", "")) }
-            var showGithubToken by remember { mutableStateOf(false) }
-
             SettingItemGroup {
-                SettingItem(
-                    title = { Text("GitHub Token") },
-                    description = {
-                        Text(
-                            "用于访问 GitHub API 时解除限速，提高更新检查的稳定性。留空则使用匿名访问，检查更新可能会失败。",
-                        )
-                    },
-                    settingKey = "githubToken",
-                    highlightedKey = highlightedSetting,
-                    bottomAction = {
-                        OutlinedTextField(
-                            value = githubToken,
-                            onValueChange = {
-                                githubToken = it
-                                settings.putString("githubToken", it)
-                            },
-                            visualTransformation = if (showGithubToken) VisualTransformation.None else PasswordVisualTransformation(),
-                            trailingIcon = {
-                                IconButton(onClick = { showGithubToken = !showGithubToken }) {
-                                    Icon(
-                                        imageVector = if (showGithubToken) Icons.Default.Visibility else Icons.Default.VisibilityOff,
-                                        contentDescription = null,
-                                    )
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth().padding(top = 16.dp),
-                            singleLine = true,
-                        )
-                    },
-                )
-
                 if (platformName == "macOS") {
                     var quitOnWindowClose by remember {
                         mutableStateOf(settings.getBoolean(MACOS_QUIT_ON_WINDOW_CLOSE_PREFERENCE_KEY, false))
@@ -366,19 +326,6 @@ fun SystemAndUpdateSettingsScreen(
                         highlightedKey = highlightedSetting,
                     )
                 }
-
-                var checkNightlyUpdates by remember { mutableStateOf(settings.getBoolean("checkNightlyUpdates", false)) }
-                SettingItemWithSwitch(
-                    title = { Text("检查 Nightly 版本更新") },
-                    description = { Text("检查每日构建版本 (可能不稳定)") },
-                    checked = checkNightlyUpdates,
-                    onCheckedChange = {
-                        checkNightlyUpdates = it
-                        settings.putBoolean("checkNightlyUpdates", it)
-                    },
-                    settingKey = "checkNightlyUpdates",
-                    highlightedKey = highlightedSetting,
-                )
 
                 var allowTelemetry by remember { mutableStateOf(settings.getBoolean("allowTelemetry", true)) }
                 SettingItemWithSwitch(
@@ -412,39 +359,6 @@ fun SystemAndUpdateSettingsScreen(
                     settingKey = AIGC_MARKING_ENABLED_PREFERENCE_KEY,
                     highlightedKey = highlightedSetting,
                 )
-            }
-
-            AnimatedVisibility(visible = !showUpdateBanner) {
-                Button(
-                    onClick = {
-                        coroutineScope.launch {
-                            when (updateState) {
-                                is SystemUpdateState.NoUpdate, is SystemUpdateState.Error -> {
-                                    checkForUpdate.check()
-                                    if (updateStateFlow.value is SystemUpdateState.UpdateAvailable) {
-                                        scrollState.animateScrollTo(0)
-                                    }
-                                }
-                                SystemUpdateState.Latest -> {
-                                    resetSystemUpdateState()
-                                }
-                                else -> { /* NOOP */ }
-                            }
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth().padding(16.dp, 0.dp, 16.dp, 16.dp),
-                ) {
-                    Text(
-                        when (updateState) {
-                            is SystemUpdateState.NoUpdate -> "检查更新"
-                            is SystemUpdateState.Checking -> "检查中..."
-                            is SystemUpdateState.Latest -> "已经是最新版本"
-                            is SystemUpdateState.Error -> "检查更新失败，点击重试"
-                            else -> ""
-                        },
-                        Modifier.padding(0.dp, 4.dp),
-                    )
-                }
             }
 
             var reminderExpanded by remember { mutableStateOf(false) }

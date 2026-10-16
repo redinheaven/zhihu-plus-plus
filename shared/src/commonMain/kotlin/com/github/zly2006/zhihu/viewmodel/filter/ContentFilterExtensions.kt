@@ -145,13 +145,23 @@ class FeedContentFilterPipeline(
             val finalFilteredContents = mutableListOf<FilterableContent>()
             val blockedThisRound = mutableListOf<FilterableContent>()
 
-            for (content in filteredContents) {
-                val (shouldBlock, matchedKeywords) = blockedKeywordService.checkNLPBlockingWithWeight(
-                    title = content.title,
-                    excerpt = content.summary,
-                    content = content.content?.let { Ksoup.parse(it).text() },
-                    threshold = settings.nlpSimilarityThreshold,
-                )
+            // 语义判断走网络，并发请求，避免一批内容串行等待
+            val checks = coroutineScope {
+                filteredContents
+                    .map { content ->
+                        async {
+                            blockedKeywordService.checkNLPBlockingWithWeight(
+                                title = content.title,
+                                excerpt = content.summary,
+                                content = content.content?.let { Ksoup.parse(it).text() },
+                                threshold = settings.nlpSimilarityThreshold,
+                            )
+                        }
+                    }.awaitAll()
+            }
+
+            for ((content, check) in filteredContents.zip(checks)) {
+                val (shouldBlock, matchedKeywords) = check
 
                 if (!shouldBlock) {
                     finalFilteredContents.add(content)

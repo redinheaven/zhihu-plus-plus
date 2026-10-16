@@ -195,9 +195,6 @@ data object Notification : NavDestination {
 }
 
 @Serializable
-data object SentenceSimilarityTest : NavDestination
-
-@Serializable
 data class Search(
     val query: String = "",
     val restrictedMemberHashId: String = "",

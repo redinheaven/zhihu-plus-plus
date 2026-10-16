@@ -65,9 +65,7 @@ import com.github.zly2006.zhihu.account.rememberZhihuAccountStore
 import com.github.zly2006.zhihu.data.ZHIHU_ME_URL
 import com.github.zly2006.zhihu.navigation.Account
 import com.github.zly2006.zhihu.navigation.LocalNavigator
-import com.github.zly2006.zhihu.navigation.SentenceSimilarityTest
 import com.github.zly2006.zhihu.notification.HOME_NOTIFICATION_READ_UUIDS_PREFERENCE_KEY
-import com.github.zly2006.zhihu.platform.isSentenceSimilaritySupported
 import com.github.zly2006.zhihu.platform.rememberPlainTextClipboard
 import com.github.zly2006.zhihu.platform.rememberSettingsStore
 import com.github.zly2006.zhihu.platform.rememberUserMessageSink
@@ -81,7 +79,6 @@ import kotlinx.coroutines.launch
 
 const val DEVELOPER_SETTINGS_BACK_BUTTON_TAG = "developerSettings/backButton"
 const val DEVELOPER_SETTINGS_MODE_TAG = "developerSettings/modeToggle"
-const val DEVELOPER_SETTINGS_SENTENCE_SIMILARITY_TAG = "developerSettings/sentenceSimilarity"
 const val DEVELOPER_SETTINGS_COLOR_SCHEME_TAG = "developerSettings/colorScheme"
 
 /**
@@ -190,15 +187,6 @@ fun DeveloperSettingsScreen() {
                 Button(onClick = { showCookieDialog = true }) { Text("手动设置Cookie") }
 
                 Button(onClick = { showSignedRequestDialog = true }) { Text("签名请求") }
-
-                if (isSentenceSimilaritySupported) {
-                    Button(
-                        modifier = Modifier.testTag(DEVELOPER_SETTINGS_SENTENCE_SIMILARITY_TAG),
-                        onClick = {
-                            navigator.onNavigate(SentenceSimilarityTest)
-                        },
-                    ) { Text("句子相似度") }
-                }
 
                 Button(
                     modifier = Modifier.testTag(DEVELOPER_SETTINGS_COLOR_SCHEME_TAG),

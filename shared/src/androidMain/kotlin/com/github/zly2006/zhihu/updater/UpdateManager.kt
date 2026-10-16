@@ -24,7 +24,6 @@ import androidx.core.content.FileProvider
 import androidx.core.net.toUri
 import com.github.zly2006.zhihu.account.androidZhihuAccountStore
 import com.github.zly2006.zhihu.platform.androidSettingsStore
-import com.github.zly2006.zhihu.platform.isLiteVariant
 import com.github.zly2006.zhihu.updater.GithubAsset
 import com.github.zly2006.zhihu.updater.GithubRelease
 import com.github.zly2006.zhihu.updater.SemanticVersion
@@ -124,7 +123,7 @@ object UpdateManager {
             val latestResponse = getLatestVersion(context)
             Log.i("UpdateManager", "Latest version response: $latestResponse")
             latestVersion = latestResponse.tagName.takeIf { it.isNotBlank() }?.let { SemanticVersion.fromString(it) }
-            val latestDownloadInfo = latestResponse.extractAndroidDownloadInfo(isLiteVariant)
+            val latestDownloadInfo = latestResponse.extractAndroidDownloadInfo()
 
             if (latestVersion != null && latestVersion > currentVersion) {
                 val versionString = latestVersion.toString()
@@ -170,7 +169,7 @@ object UpdateManager {
             val latestResponse = getLatestVersion(context)
             latestVersion = latestResponse.tagName.takeIf { it.isNotBlank() }?.let { SemanticVersion.fromString(it) }
             releaseNotes = latestResponse.body?.let(::extractGithubReleaseNotes)
-            var downloadInfo = latestResponse.extractAndroidDownloadInfo(isLiteVariant)
+            var downloadInfo = latestResponse.extractAndroidDownloadInfo()
 
             // 如果启用了nightly检查，也检查nightly版本
             if (checkNightly) {
@@ -186,7 +185,7 @@ object UpdateManager {
                         )
                         isNightly = true
                         releaseNotes = nightlyResponse.body?.let(::extractGithubReleaseNotes)
-                        downloadInfo = nightlyResponse.extractAndroidDownloadInfo(isLiteVariant)
+                        downloadInfo = nightlyResponse.extractAndroidDownloadInfo()
                     }
                 } catch (e: Exception) {
                     // nightly版本检查失败时，继续使用正式版本

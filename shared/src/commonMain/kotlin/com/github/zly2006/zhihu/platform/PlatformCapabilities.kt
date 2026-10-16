@@ -31,11 +31,7 @@ expect val isNative: Boolean
 
 expect val isAigcVoteSupported: Boolean
 
-expect val isLiteVariant: Boolean
-
 expect val isBlocklistNlpSupported: Boolean
-
-expect val isSentenceSimilaritySupported: Boolean
 
 expect val isArticleHtmlExportSupported: Boolean
 

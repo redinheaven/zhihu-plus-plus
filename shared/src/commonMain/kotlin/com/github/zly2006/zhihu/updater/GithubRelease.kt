@@ -86,10 +86,9 @@ internal data class AndroidReleaseDownloadInfo(
     val opensExternally: Boolean = false,
 )
 
-internal fun GithubRelease.extractAndroidDownloadInfo(isLiteVariant: Boolean): AndroidReleaseDownloadInfo {
+internal fun GithubRelease.extractAndroidDownloadInfo(): AndroidReleaseDownloadInfo {
     val apkAssets = assets.filter { it.contentType == "application/vnd.android.package-archive" }
-    val variant = if (isLiteVariant) "lite" else "full"
-    val selectedAsset = apkAssets.firstOrNull { it.name.contains(variant, ignoreCase = true) } ?: apkAssets.firstOrNull()
+    val selectedAsset = apkAssets.firstOrNull { it.name.contains("lite", ignoreCase = true) } ?: apkAssets.firstOrNull()
     if (selectedAsset != null) {
         return AndroidReleaseDownloadInfo(selectedAsset.browserDownloadUrl, selectedAsset.cnDownloadUrl)
     }

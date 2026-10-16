@@ -62,10 +62,8 @@ import com.github.zly2006.zhihu.navigation.Question
 import com.github.zly2006.zhihu.navigation.TopLevelDestination
 import com.github.zly2006.zhihu.navigation.Video
 import com.github.zly2006.zhihu.navigation.resolveContent
-import com.github.zly2006.zhihu.nlp.KeywordWeightExtractor
-import com.github.zly2006.zhihu.nlp.NLPService
-import com.github.zly2006.zhihu.nlp.NlpServiceKeywordSemanticMatcher
-import com.github.zly2006.zhihu.nlp.SentenceEmbeddingManager
+import com.github.zly2006.zhihu.nlp.JevKeywordSemanticMatcher
+import com.github.zly2006.zhihu.nlp.JevKeywordWeightExtractor
 import com.github.zly2006.zhihu.platform.androidSettingsStore
 import com.github.zly2006.zhihu.platform.androidUserMessageSink
 import com.github.zly2006.zhihu.reading.ContentReadingService
@@ -79,10 +77,8 @@ import com.github.zly2006.zhihu.ui.components.PageTurnDispatcher
 import com.github.zly2006.zhihu.ui.components.PageTurnFab
 import com.github.zly2006.zhihu.ui.components.getHighestQualityVideoUrl
 import com.github.zly2006.zhihu.ui.subscreens.PREF_VOLUME_KEY_PAGE_TURN
-import com.github.zly2006.zhihu.updater.UpdateManager
 import com.github.zly2006.zhihu.util.ContinuousUsageReminderManager
 import com.github.zly2006.zhihu.util.EmojiManager
-import com.github.zly2006.zhihu.util.PowerSaveModeCompat
 import com.github.zly2006.zhihu.util.ZHIHU_WEB_ZSE93
 import com.github.zly2006.zhihu.util.ZhihuCredentialRefresher
 import com.github.zly2006.zhihu.util.clearShareImageCache
@@ -93,9 +89,7 @@ import com.github.zly2006.zhihu.viewmodel.filter.androidKeywordSemanticMatcher
 import com.github.zly2006.zhihu.viewmodel.filter.androidKeywordWeightExtractor
 import com.github.zly2006.zhihu.viewmodel.filter.getContentFilterDatabase
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
 
@@ -148,10 +142,8 @@ class MainActivity : ComponentActivity() {
         history = HistoryStorage(this)
         AccountData.loadData(this)
         AndroidThemeSettings.initialize(this)
-        androidKeywordSemanticMatcher = NlpServiceKeywordSemanticMatcher
-        androidKeywordWeightExtractor = KeywordWeightExtractor { text, topN ->
-            NLPService.extractKeywordsWithWeight(text, topN)
-        }
+        androidKeywordSemanticMatcher = JevKeywordSemanticMatcher
+        androidKeywordWeightExtractor = JevKeywordWeightExtractor
         getContentFilterDatabase(this)
 
         val settings = androidSettingsStore(this)
@@ -168,13 +160,6 @@ class MainActivity : ComponentActivity() {
                     Log.e(TAG, "Failed to refresh Zhihu token", e)
                     androidUserMessageSink(this@MainActivity)
                         .showLongMessage("刷新登录状态失败，如多次看到此提示请重新登录")
-                }
-                if (!PowerSaveModeCompat.getPowerSaveMode(this@MainActivity).isPowerSaveMode) {
-                    try {
-                        SentenceEmbeddingManager.ensureModel(this@MainActivity)
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed to initialize NLP embedding model", e)
-                    }
                 }
             }
         }
@@ -250,18 +235,6 @@ class MainActivity : ComponentActivity() {
                     loader
                 }
             }
-
-        // 自动检查更新（在应用启动时）
-        if (savedInstanceState == null) {
-            @OptIn(DelicateCoroutinesApi::class)
-            GlobalScope.launch {
-                try {
-                    UpdateManager.autoCheckForUpdate(this@MainActivity)
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to check for updates", e)
-                }
-            }
-        }
     }
 
     override fun onStart() {

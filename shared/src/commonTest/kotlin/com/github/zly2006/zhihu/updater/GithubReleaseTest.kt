@@ -32,7 +32,7 @@ class GithubReleaseTest {
             "[夸克下载](https://pan.quark.cn/s/abc123)",
             "<https://pan.quark.cn/s/abc123>",
         )) {
-            val info = GithubRelease(body = body).extractAndroidDownloadInfo(true)
+            val info = GithubRelease(body = body).extractAndroidDownloadInfo()
             assertEquals("https://pan.quark.cn/s/abc123", info.browserDownloadUrl)
             assertNull(info.cnDownloadUrl)
             assertTrue(info.opensExternally)
@@ -42,7 +42,7 @@ class GithubReleaseTest {
     @Test
     fun missingApkAndQuarkLinkFails() {
         assertFailsWith<IllegalStateException> {
-            GithubRelease(body = "https://example.com/s/abc123").extractAndroidDownloadInfo(true)
+            GithubRelease(body = "https://example.com/s/abc123").extractAndroidDownloadInfo()
         }
     }
 
@@ -51,8 +51,7 @@ class GithubReleaseTest {
         val lite = GithubAsset("app-lite.apk", "application/vnd.android.package-archive", "https://example.com/lite.apk", "https://example.com/mirror")
         val full = lite.copy(name = "app-full.apk", browserDownloadUrl = "https://example.com/full.apk")
         val release = GithubRelease(body = "https://pan.quark.cn/s/abc123", assets = listOf(full, lite))
-        assertEquals(AndroidReleaseDownloadInfo(lite.browserDownloadUrl, lite.cnDownloadUrl), release.extractAndroidDownloadInfo(true))
-        assertEquals(AndroidReleaseDownloadInfo(full.browserDownloadUrl, full.cnDownloadUrl), release.extractAndroidDownloadInfo(false))
+        assertEquals(AndroidReleaseDownloadInfo(lite.browserDownloadUrl, lite.cnDownloadUrl), release.extractAndroidDownloadInfo())
     }
 
     @Test

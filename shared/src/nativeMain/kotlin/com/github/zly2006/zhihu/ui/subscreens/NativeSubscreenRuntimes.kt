@@ -211,9 +211,6 @@ private fun loadNativeAboutLibrariesJson(): String? {
     return bytes.decodeToString().takeIf { it.isNotBlank() }
 }
 
-@Composable
-actual fun rememberShowFullVariantLicenses(): Boolean = false
-
 actual val isWebViewCustomFontSupported: Boolean = false
 
 @Composable

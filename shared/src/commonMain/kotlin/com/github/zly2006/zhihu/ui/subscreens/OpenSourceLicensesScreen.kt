@@ -22,8 +22,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.DataObject
-import androidx.compose.material.icons.filled.Memory
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -36,116 +34,40 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.unit.dp
 import com.github.zly2006.zhihu.navigation.LocalNavigator
-import com.github.zly2006.zhihu.ui.components.SettingItem
-import com.github.zly2006.zhihu.ui.components.SettingItemGroup
 import com.mikepenz.aboutlibraries.Libs
 import com.mikepenz.aboutlibraries.ui.compose.m3.LibrariesContainer
 
-data class ManualLicenseEntry(
-    val name: String,
-    val license: String,
-    val summary: String,
-    val url: String,
-    val icon: @Composable () -> Unit,
-)
-
-val fullVariantManualLibraries = listOf(
-    ManualLicenseEntry(
-        name = "Sentence-Embeddings-Android",
-        license = "Apache-2.0",
-        summary = "用于执行句子嵌入。",
-        url = "https://github.com/shubham0204/Sentence-Embeddings-Android",
-        icon = { Icon(Icons.Default.Memory, contentDescription = null) },
-    ),
-    ManualLicenseEntry(
-        name = "huggingface/tokenizers 0.22.2",
-        license = "Apache-2.0",
-        summary = "huggingface tokenizer",
-        url = "https://github.com/huggingface/tokenizers",
-        icon = { Icon(Icons.Default.DataObject, contentDescription = null) },
-    ),
-    ManualLicenseEntry(
-        name = "jni 0.21.1",
-        license = "MIT/Apache-2.0",
-        summary = "Rust JNI 绑定。",
-        url = "https://github.com/jni-rs/jni-rs",
-        icon = { Icon(Icons.Default.DataObject, contentDescription = null) },
-    ),
-    ManualLicenseEntry(
-        name = "bytes 1.11.1",
-        license = "MIT",
-        summary = "Rust bytes 缓冲区库。",
-        url = "https://github.com/tokio-rs/bytes",
-        icon = { Icon(Icons.Default.DataObject, contentDescription = null) },
-    ),
-    ManualLicenseEntry(
-        name = "serde 1.0.228",
-        license = "MIT OR Apache-2.0",
-        summary = "Rust 序列化框架。",
-        url = "https://github.com/serde-rs/serde",
-        icon = { Icon(Icons.Default.DataObject, contentDescription = null) },
-    ),
-    ManualLicenseEntry(
-        name = "serde_json 1.0.149",
-        license = "MIT OR Apache-2.0",
-        summary = "Rust JSON 序列化实现。",
-        url = "https://github.com/serde-rs/json",
-        icon = { Icon(Icons.Default.DataObject, contentDescription = null) },
-    ),
-)
-
 /**
- * 开源许可列表内容。
- *
- * 许可证主体由 about-libraries 生成，手动维护项用于补充当前工具无法自动识别的 Rust/Full variant 依赖。新增依赖时应优先让
- * 构建系统生成许可证；只有无法自动发现时再加入 [manualLibraries]。
+ * 开源许可列表内容，许可证由 about-libraries 生成。
  */
 @Suppress("DEPRECATION")
 @Composable
 fun OpenSourceLicensesContent(
     modifier: Modifier = Modifier,
     contentPadding: PaddingValues,
-    manualLibraries: List<ManualLicenseEntry>,
-    onOpenUrl: (String) -> Unit,
 ) {
     LibrariesContainer(
         libraries = rememberOpenSourceLicensesLibraries(),
         modifier = modifier,
         contentPadding = contentPadding,
-        header = {
-            if (manualLibraries.isNotEmpty()) {
-                item {
-                    ManualLicenseEntryGroup(
-                        manualLibraries = manualLibraries,
-                        onOpenUrl = onOpenUrl,
-                    )
-                }
-            }
-        },
     )
 }
 
 @Composable
 expect fun rememberOpenSourceLicensesLibraries(): Libs
 
-@Composable
-expect fun rememberShowFullVariantLicenses(): Boolean
-
 /**
  * 开源许可页面。
  *
- * 页面包装许可证列表、返回按钮和滚动行为，并根据当前变体决定是否展示 Full variant 的手工许可证项。它是账号页“开源许可”入口的终点。
+ * 页面包装许可证列表、返回按钮和滚动行为。它是账号页“开源许可”入口的终点。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun OpenSourceLicensesScreen() {
     val navigator = LocalNavigator.current
-    val uriHandler = LocalUriHandler.current
     val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
-    val manualLibraries = if (rememberShowFullVariantLicenses()) fullVariantManualLibraries else emptyList()
 
     Scaffold(
         modifier = Modifier
@@ -176,31 +98,9 @@ fun OpenSourceLicensesScreen() {
     ) { innerPadding ->
         OpenSourceLicensesContent(
             contentPadding = PaddingValues(16.dp),
-            manualLibraries = manualLibraries,
-            onOpenUrl = uriHandler::openUri,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding),
         )
-    }
-}
-
-@Composable
-fun ManualLicenseEntryGroup(
-    manualLibraries: List<ManualLicenseEntry>,
-    onOpenUrl: (String) -> Unit,
-) {
-    if (manualLibraries.isEmpty()) {
-        return
-    }
-    SettingItemGroup(title = "Full 版本特有组件") {
-        manualLibraries.forEach { entry ->
-            SettingItem(
-                title = { Text(entry.name) },
-                description = { Text("${entry.license} · ${entry.summary}") },
-                icon = entry.icon,
-                onClick = { onOpenUrl(entry.url) },
-            )
-        }
     }
 }

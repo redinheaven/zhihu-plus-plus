@@ -97,9 +97,6 @@ fun AndroidZhihuMain(navController: NavHostController) {
             }
             ArticleScreen(article, viewModel)
         },
-        sentenceSimilarityContent = {
-            SentenceSimilarityTestScreen()
-        },
         blocklistSettingsNlpContent = { onNavigateBack ->
             NLPKeywordManagementScreen(
                 innerPadding = PaddingValues(),

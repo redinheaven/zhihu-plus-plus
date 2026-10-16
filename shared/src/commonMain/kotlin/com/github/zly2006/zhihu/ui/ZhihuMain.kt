@@ -133,7 +133,6 @@ import com.github.zly2006.zhihu.navigation.Person
 import com.github.zly2006.zhihu.navigation.Pin
 import com.github.zly2006.zhihu.navigation.Question
 import com.github.zly2006.zhihu.navigation.Search
-import com.github.zly2006.zhihu.navigation.SentenceSimilarityTest
 import com.github.zly2006.zhihu.navigation.TopLevelDestination
 import com.github.zly2006.zhihu.navigation.Topic
 import com.github.zly2006.zhihu.navigation.Video
@@ -222,9 +221,6 @@ fun ZhihuMain(
     showMainNavigationBar: Boolean = true,
     showHomeTopActions: Boolean = true,
     onCurrentMainTabDestinationChange: (TopLevelDestination) -> Unit = {},
-    sentenceSimilarityContent: @Composable () -> Unit = {
-        error("$platformName 暂不支持句子相似度测试")
-    },
     blocklistSettingsNlpContent: @Composable (onNavigateBack: () -> Unit) -> Unit = {
         error("$platformName 暂不支持 NLP 智能屏蔽设置")
     },
@@ -838,9 +834,6 @@ fun ZhihuMain(
                                 NotificationSettingsScreen(
                                     setting = navEntry.toRoute<Notification.NotificationSettings>().setting,
                                 )
-                            }
-                            composable<SentenceSimilarityTest> {
-                                sentenceSimilarityContent()
                             }
                         }
                     }
