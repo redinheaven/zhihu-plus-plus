@@ -37,6 +37,7 @@ data class KeywordBackup(
     val keyword: String,
     val caseSensitive: Boolean = false,
     val isRegex: Boolean = false,
+    val scope: String = KeywordScope.ALL.name,
 )
 
 @Serializable
@@ -84,7 +85,7 @@ suspend fun encodeBlocklistBackup(
     val backup = BlocklistBackup(
         keywords = allKeywords
             .filter { it.getKeywordTypeEnum() == KeywordType.EXACT_MATCH }
-            .map { KeywordBackup(it.keyword, it.caseSensitive, it.isRegex) },
+            .map { KeywordBackup(it.keyword, it.caseSensitive, it.isRegex, it.scope) },
         nlpKeywords = allKeywords
             .filter { it.getKeywordTypeEnum() == KeywordType.NLP_SEMANTIC }
             .map { NlpKeywordBackup(it.keyword) },
@@ -112,6 +113,7 @@ suspend fun importBlocklistBackupFromJsonText(
                 keywordType = KeywordType.EXACT_MATCH.name,
                 caseSensitive = kw.caseSensitive,
                 isRegex = kw.isRegex,
+                scope = kw.scope,
             ),
         )
     }

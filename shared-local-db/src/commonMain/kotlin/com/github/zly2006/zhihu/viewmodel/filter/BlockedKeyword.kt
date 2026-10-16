@@ -30,6 +30,17 @@ enum class KeywordType {
 }
 
 /**
+ * 精确匹配关键词的匹配范围。
+ */
+enum class KeywordScope(
+    val label: String,
+) {
+    ALL("全部内容"), // 标题、摘要、正文
+    TITLE("仅标题"),
+    AUTHOR_NAME("仅作者名"),
+}
+
+/**
  * 屏蔽关键词实体
  * 用于屏蔽包含特定关键词的内容
  */
@@ -41,6 +52,7 @@ data class BlockedKeyword(
     val caseSensitive: Boolean = false, // 是否区分大小写（仅精确匹配模式）
     val isRegex: Boolean = false, // 是否为正则表达式（仅精确匹配模式）
     val createdTime: Long = currentEpochMillis(), // 创建时间
+    val scope: String = KeywordScope.ALL.name, // 匹配范围（仅精确匹配模式）
 ) {
     companion object {
         const val TABLE_NAME = "blocked_keywords"
@@ -52,6 +64,8 @@ data class BlockedKeyword(
     } catch (e: Exception) {
         KeywordType.EXACT_MATCH
     }
+
+    fun getKeywordScopeEnum(): KeywordScope = KeywordScope.entries.find { it.name == scope } ?: KeywordScope.ALL
 
     // 辅助方法：获取NLP短语的各个关键词
     fun getNLPKeywords(): List<String> = if (getKeywordTypeEnum() == KeywordType.NLP_SEMANTIC) {

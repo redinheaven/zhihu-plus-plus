@@ -30,7 +30,7 @@ import kotlinx.coroutines.Dispatchers
 
 @Database(
     entities = [ContentViewRecord::class, BlockedKeyword::class, BlockedUser::class, BlockedQuestionAuthor::class, BlockedContentRecord::class, BlockedTopic::class, BlockedFeedRecord::class, ContentOpenEvent::class],
-    version = 7,
+    version = 8,
     exportSchema = false,
 )
 @ConstructedBy(ContentFilterDatabaseConstructor::class)
@@ -169,10 +169,21 @@ private val migration6To7 = object : Migration(6, 7) {
     }
 }
 
+private val migration7To8 = object : Migration(7, 8) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.execSQL(
+            """
+            ALTER TABLE `${BlockedKeyword.TABLE_NAME}`
+            ADD COLUMN `scope` TEXT NOT NULL DEFAULT '${KeywordScope.ALL.name}'
+            """.trimIndent(),
+        )
+    }
+}
+
 fun buildContentFilterDatabase(
     builder: Builder<ContentFilterDatabase>,
 ): ContentFilterDatabase = builder
-    .addMigrations(migration2To3, migration3To4, migration4To5, migration5To6, migration6To7)
+    .addMigrations(migration2To3, migration3To4, migration4To5, migration5To6, migration6To7, migration7To8)
     .fallbackToDestructiveMigration(true)
     .applyPlatformDriver()
     .setQueryCoroutineContext(Dispatchers.Default)

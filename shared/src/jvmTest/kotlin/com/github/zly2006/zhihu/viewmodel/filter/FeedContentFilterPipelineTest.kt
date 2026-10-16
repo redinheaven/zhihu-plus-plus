@@ -125,6 +125,37 @@ class FeedContentFilterPipelineTest {
         database.close()
     }
 
+    @Test
+    fun keywordScopeLimitsMatchedFields() = runTest {
+        val database = getContentFilterDatabase(
+            createTempDirectory("feed-content-filter-scope").resolve("content-filter.db").toFile(),
+        )
+        val keywordDao = database.blockedKeywordDao()
+        keywordDao.insertKeyword(BlockedKeyword(keyword = "标题词", scope = KeywordScope.TITLE.name))
+        keywordDao.insertKeyword(BlockedKeyword(keyword = "营销号", scope = KeywordScope.AUTHOR_NAME.name))
+        keywordDao.insertKeyword(BlockedKeyword(keyword = "全文词"))
+
+        val result = FeedContentFilterPipeline(
+            settings = FeedFilterSettings(enableNlpBlocking = false),
+            blockedKeywordDao = keywordDao,
+            blockedUserDao = database.blockedUserDao(),
+            blockedQuestionAuthorDao = database.blockedQuestionAuthorDao(),
+            blockedTopicDao = database.blockedTopicDao(),
+            blockedKeywordService = BlockedKeywordService(keywordDao, database.blockedContentRecordDao(), null),
+        ).filter(
+            listOf(
+                filterable("含标题词的标题", content = "正文", authorId = "a"),
+                filterable("正文提到", content = "正文里有标题词", authorId = "a"),
+                filterable("作者命中", authorId = "a").copy(authorName = "某营销号"),
+                filterable("标题提到营销号", authorId = "a"),
+                filterable("全文命中", content = "正文里有全文词", authorId = "a"),
+            ),
+        )
+
+        assertEquals(listOf("正文提到", "标题提到营销号"), result.kept.map { it.title })
+        database.close()
+    }
+
     private fun filterable(
         title: String,
         content: String = title,

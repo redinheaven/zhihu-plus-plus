@@ -20,6 +20,8 @@ package com.github.zly2006.zhihu.ui
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -42,6 +44,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -78,6 +81,7 @@ import com.github.zly2006.zhihu.viewmodel.filter.BlockedQuestionAuthor
 import com.github.zly2006.zhihu.viewmodel.filter.BlockedTopic
 import com.github.zly2006.zhihu.viewmodel.filter.BlockedUser
 import com.github.zly2006.zhihu.viewmodel.filter.BlocklistStats
+import com.github.zly2006.zhihu.viewmodel.filter.KeywordScope
 import com.github.zly2006.zhihu.viewmodel.filter.KeywordType
 import com.github.zly2006.zhihu.viewmodel.filter.getContentFilterDatabase
 import kotlinx.coroutines.launch
@@ -102,6 +106,7 @@ object BlocklistSettingsTestTags {
     const val KEYWORD_DIALOG_INPUT = "blocklistSettings:keywordDialog:input"
     const val KEYWORD_DIALOG_CASE_SENSITIVE = "blocklistSettings:keywordDialog:caseSensitive"
     const val KEYWORD_DIALOG_REGEX = "blocklistSettings:keywordDialog:regex"
+    const val KEYWORD_DIALOG_SCOPE_PREFIX = "blocklistSettings:keywordDialog:scope:"
     const val KEYWORD_DIALOG_CONFIRM = "blocklistSettings:keywordDialog:confirm"
     const val KEYWORD_DIALOG_DISMISS = "blocklistSettings:keywordDialog:dismiss"
     const val USER_DIALOG_ID_INPUT = "blocklistSettings:userDialog:userId"
@@ -498,7 +503,7 @@ fun BlocklistSettingsScreen(
     if (showAddKeywordDialog) {
         AddKeywordDialog(
             onDismiss = { showAddKeywordDialog = false },
-            onConfirm = { keyword, caseSensitive, isRegex ->
+            onConfirm = { keyword, caseSensitive, isRegex, scope ->
                 coroutineScope.launch {
                     try {
                         database.blockedKeywordDao().insertKeyword(
@@ -507,6 +512,7 @@ fun BlocklistSettingsScreen(
                                 keywordType = KeywordType.EXACT_MATCH.name,
                                 caseSensitive = caseSensitive,
                                 isRegex = isRegex,
+                                scope = scope.name,
                             ),
                         )
                         userMessages.showShortMessage("已添加关键词")
@@ -642,6 +648,8 @@ fun BlockedKeywordsList(
                         headlineContent = { Text(keyword.keyword) },
                         supportingContent = {
                             val options = mutableListOf<String>()
+                            val scope = keyword.getKeywordScopeEnum()
+                            if (scope != KeywordScope.ALL) options.add(scope.label)
                             if (keyword.caseSensitive) options.add("区分大小写")
                             if (keyword.isRegex) options.add("正则表达式")
                             if (options.isNotEmpty()) {
@@ -762,12 +770,14 @@ private fun <T> BlockedPeopleList(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun AddKeywordDialog(
     onDismiss: () -> Unit,
-    onConfirm: (String, Boolean, Boolean) -> Unit,
+    onConfirm: (String, Boolean, Boolean, KeywordScope) -> Unit,
 ) {
     var keyword by remember { mutableStateOf("") }
+    var scope by remember { mutableStateOf(KeywordScope.ALL) }
     var caseSensitive by remember { mutableStateOf(false) }
     var isRegex by remember { mutableStateOf(false) }
 
@@ -788,6 +798,17 @@ fun AddKeywordDialog(
                         .testTag(BlocklistSettingsTestTags.KEYWORD_DIALOG_INPUT),
                 )
                 Spacer(modifier = Modifier.height(8.dp))
+                Text("匹配范围", style = MaterialTheme.typography.labelLarge)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    KeywordScope.entries.forEach { option ->
+                        FilterChip(
+                            modifier = Modifier.testTag(BlocklistSettingsTestTags.KEYWORD_DIALOG_SCOPE_PREFIX + option.name),
+                            selected = scope == option,
+                            onClick = { scope = option },
+                            label = { Text(option.label) },
+                        )
+                    }
+                }
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.fillMaxWidth(),
@@ -827,7 +848,7 @@ fun AddKeywordDialog(
                 modifier = Modifier.testTag(BlocklistSettingsTestTags.KEYWORD_DIALOG_CONFIRM),
                 onClick = {
                     if (keyword.isNotBlank()) {
-                        onConfirm(keyword, caseSensitive, isRegex)
+                        onConfirm(keyword, caseSensitive, isRegex, scope)
                     }
                 },
                 enabled = keyword.isNotBlank(),

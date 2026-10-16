@@ -129,9 +129,13 @@ class FeedContentFilterPipeline(
                 .getAllKeywords()
                 .filter { it.getKeywordTypeEnum() == KeywordType.EXACT_MATCH }
             val (kept, removed) = filteredContents.partition { content ->
-                !containsBlockedKeyword(content.title, exactKeywords) &&
-                    !containsBlockedKeyword(content.summary, exactKeywords) &&
-                    !containsBlockedKeyword(content.content, exactKeywords)
+                exactKeywords.none { keyword ->
+                    when (keyword.getKeywordScopeEnum()) {
+                        KeywordScope.ALL -> listOf(content.title, content.summary, content.content)
+                        KeywordScope.TITLE -> listOf(content.title)
+                        KeywordScope.AUTHOR_NAME -> listOf(content.authorName)
+                    }.any { keyword.matches(it) }
+                }
             }
             removed.forEach { blocked.add(it to "关键词屏蔽") }
             filteredContents = kept
@@ -196,28 +200,23 @@ class FeedContentFilterPipeline(
     }
 }
 
-private fun containsBlockedKeyword(
-    text: String?,
-    keywords: List<BlockedKeyword>,
-): Boolean {
+private fun BlockedKeyword.matches(text: String?): Boolean {
     if (text.isNullOrBlank()) return false
 
-    return keywords.any { blockedKeyword ->
-        runCatching {
-            when {
-                blockedKeyword.isRegex -> {
-                    val pattern = if (blockedKeyword.caseSensitive) {
-                        Regex(blockedKeyword.keyword)
-                    } else {
-                        Regex(blockedKeyword.keyword, RegexOption.IGNORE_CASE)
-                    }
-                    pattern.containsMatchIn(text)
+    return runCatching {
+        when {
+            isRegex -> {
+                val pattern = if (caseSensitive) {
+                    Regex(keyword)
+                } else {
+                    Regex(keyword, RegexOption.IGNORE_CASE)
                 }
-                blockedKeyword.caseSensitive -> text.contains(blockedKeyword.keyword)
-                else -> text.contains(blockedKeyword.keyword, ignoreCase = true)
+                pattern.containsMatchIn(text)
             }
-        }.getOrDefault(false)
-    }
+            caseSensitive -> text.contains(keyword)
+            else -> text.contains(keyword, ignoreCase = true)
+        }
+    }.getOrDefault(false)
 }
 
 fun interface ContentDetailProvider {
