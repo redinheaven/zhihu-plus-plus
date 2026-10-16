@@ -50,7 +50,22 @@ interface ContentOpenEventDao {
         """,
     )
     suspend fun getRemotelySyncedContentKeys(type: String, ids: List<String>): List<String>
+
+    /** 每条内容最近一次打开的时间，列表上的「读过」标签一次读入 */
+    @Query(
+        """
+        SELECT contentType || ':' || contentId AS contentKey, MAX(openedAt) AS openedAt
+        FROM ${ContentOpenEvent.TABLE_NAME}
+        GROUP BY contentType, contentId
+        """,
+    )
+    suspend fun getLastOpenedTimes(): List<ContentLastOpened>
 }
+
+data class ContentLastOpened(
+    val contentKey: String,
+    val openedAt: Long,
+)
 
 private suspend fun queryContentKeys(
     keys: List<String>,

@@ -56,7 +56,6 @@ import com.github.zly2006.zhihu.util.ArticleExportComment
 import com.github.zly2006.zhihu.util.Log
 import com.github.zly2006.zhihu.util.ZhidaSummarySsePayload
 import com.github.zly2006.zhihu.util.ZhihuFetchSignature
-import com.github.zly2006.zhihu.util.applySegmentInfosToHtml
 import com.github.zly2006.zhihu.util.buildArticleExportCommentsHtml
 import com.github.zly2006.zhihu.util.buildArticleExportFileName
 import com.github.zly2006.zhihu.util.buildZhidaSummaryRequest
@@ -266,13 +265,7 @@ class ArticleViewModel(
                             authorName = answer.author.name
                             authorId = answer.author.id
                             authorUrlToken = answer.author.urlToken
-                            content = applySegmentInfosToHtml(
-                                content = answer.content,
-                                segmentInfos = answer.segmentInfos,
-                                sourceUrl = "https://www.zhihu.com/question/${answer.question.id}/answer/${answer.id}",
-                                contentId = answer.id.toString(),
-                                contentType = "answer",
-                            )
+                            content = answer.content // 本 fork 不显示段评划线
                             attachment = answer.attachment
                             authorBio = answer.author.headline
                             authorAvatarSrc = answer.author.avatarUrl
@@ -344,13 +337,7 @@ class ArticleViewModel(
                             endorsements = emptyList()
                             exportSourceContent = article
                             title = article.title
-                            content = applySegmentInfosToHtml(
-                                content = article.content,
-                                segmentInfos = article.segmentInfos,
-                                sourceUrl = "https://zhuanlan.zhihu.com/p/${article.id}",
-                                contentId = article.id.toString(),
-                                contentType = "article",
-                            )
+                            content = article.content // 本 fork 不显示段评划线
                             voteUpCount = article.voteupCount
                             votersTotal = article.voteupCount
                             commentCount = article.commentCount

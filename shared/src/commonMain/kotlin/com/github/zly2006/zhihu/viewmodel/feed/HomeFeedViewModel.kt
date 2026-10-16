@@ -26,6 +26,7 @@ import com.github.zly2006.zhihu.data.flattenFeeds
 import com.github.zly2006.zhihu.data.navDestination
 import com.github.zly2006.zhihu.data.questionAuthor
 import com.github.zly2006.zhihu.data.target
+import com.github.zly2006.zhihu.navigation.Article
 import com.github.zly2006.zhihu.navigation.Question
 import com.github.zly2006.zhihu.util.Log
 import com.github.zly2006.zhihu.viewmodel.ContentInteractionEnvironment
@@ -165,9 +166,12 @@ class HomeFeedViewModel :
         allowGuestAccess = true
     }
 
+    override val pagesPerRefresh = 2
+
     public override suspend fun fetchFeeds(environment: PaginationEnvironment) {
         markItemsAsTouched(environment)
         super.fetchFeeds(environment)
+        if (errorMessage != null) showOfflineItemsIfEmpty(environment)
     }
 
     @OptIn(DelicateCoroutinesApi::class)

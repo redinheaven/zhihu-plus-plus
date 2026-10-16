@@ -502,7 +502,7 @@ class PersonViewModel(
     }
 }
 
-private fun DataHolder.Answer.toPeopleAnswerDisplayItem(): FeedDisplayItem {
+internal fun DataHolder.Answer.toPeopleAnswerDisplayItem(): FeedDisplayItem {
     val destination = Article(
         type = ArticleType.Answer,
         id = id,
@@ -522,7 +522,7 @@ private fun DataHolder.Answer.toPeopleAnswerDisplayItem(): FeedDisplayItem {
     )
 }
 
-private fun DataHolder.Article.toPeopleArticleDisplayItem(): FeedDisplayItem {
+internal fun DataHolder.Article.toPeopleArticleDisplayItem(): FeedDisplayItem {
     val destination = Article(
         type = ArticleType.Article,
         id = id,

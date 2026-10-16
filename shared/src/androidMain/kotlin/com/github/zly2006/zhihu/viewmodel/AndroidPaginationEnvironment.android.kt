@@ -239,8 +239,8 @@ open class SharedAndroidPaginationEnvironment(
 
     override fun feedDisplaySettings(): FeedDisplaySettings = FeedDisplaySettings(
         qualityFilterMode = QualityFilterMode.entries.firstOrNull {
-            it.name == settingsStore.getString(QUALITY_FILTER_MODE_PREFERENCE_KEY, QualityFilterMode.RULES.name)
-        } ?: QualityFilterMode.RULES,
+            it.name == settingsStore.getString(QUALITY_FILTER_MODE_PREFERENCE_KEY, QualityFilterMode.HIDE.name)
+        } ?: QualityFilterMode.HIDE,
         qualityFilter = QualityFilterSettings(
             answerVoteupCount = settingsStore.getInt(ANSWER_VOTEUP_THRESHOLD_PREFERENCE_KEY, 10).coerceAtLeast(0),
             articleVoteupCount = settingsStore.getInt(ARTICLE_VOTEUP_THRESHOLD_PREFERENCE_KEY, 20).coerceAtLeast(0),

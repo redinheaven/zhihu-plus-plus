@@ -82,6 +82,7 @@ import com.github.zly2006.zhihu.platform.rememberSettingsStore
 import com.github.zly2006.zhihu.platform.rememberUserMessageSink
 import com.github.zly2006.zhihu.reading.RegisterReadingQueueSource
 import com.github.zly2006.zhihu.ui.TopLevelReselectAction
+import com.github.zly2006.zhihu.ui.components.BlockTopicMenuItems
 import com.github.zly2006.zhihu.ui.components.DraggableRefreshButton
 import com.github.zly2006.zhihu.ui.components.FeedAuthorBlockConfirmDialog
 import com.github.zly2006.zhihu.ui.components.FeedAuthorBlockRequest
@@ -358,7 +359,7 @@ fun FollowRecommendScreen(
     val environment = rememberPaginationEnvironment(allowGuestAccess = viewModel.allowGuestAccess)
     val settings = rememberSettingsStore()
     val userMessages = rememberUserMessageSink()
-    val showRefreshFab = remember { settings.getBoolean("showRefreshFab", true) }
+    val showRefreshFab = remember { settings.getBoolean("showRefreshFab", false) }
     val listState = rememberLazyListState()
     var cachedScrollToTopTrigger by remember { mutableIntStateOf(scrollToTopTrigger) }
 
@@ -455,14 +456,9 @@ fun FollowRecommendScreen(
                             is DataHolder.Pin -> raw.topics ?: emptyList()
                             else -> emptyList()
                         }
-                        topics.forEach { topic ->
-                            DropdownMenuItem(
-                                text = { Text("屏蔽「${topic.name}」") },
-                                onClick = {
-                                    dismissMenu()
-                                    viewModel.handleBlockTopic(userMessages, topic.id, topic.name)
-                                },
-                            )
+                        BlockTopicMenuItems(topics) { topic ->
+                            dismissMenu()
+                            viewModel.handleBlockTopic(userMessages, topic.id, topic.name)
                         }
                     },
                 )
@@ -512,7 +508,7 @@ fun FollowDynamicScreen(
     val environment = rememberPaginationEnvironment(allowGuestAccess = viewModel.allowGuestAccess)
     val settings = rememberSettingsStore()
     val userMessages = rememberUserMessageSink()
-    val showRefreshFab = remember { settings.getBoolean("showRefreshFab", true) }
+    val showRefreshFab = remember { settings.getBoolean("showRefreshFab", false) }
     val listState = rememberLazyListState()
     var cachedScrollToTopTrigger by remember { mutableIntStateOf(scrollToTopTrigger) }
 
@@ -610,14 +606,9 @@ fun FollowDynamicScreen(
                             is DataHolder.Pin -> raw.topics ?: emptyList()
                             else -> emptyList()
                         }
-                        topics.forEach { topic ->
-                            DropdownMenuItem(
-                                text = { Text("屏蔽「${topic.name}」") },
-                                onClick = {
-                                    dismissMenu()
-                                    viewModel.handleBlockTopic(userMessages, topic.id, topic.name)
-                                },
-                            )
+                        BlockTopicMenuItems(topics) { topic ->
+                            dismissMenu()
+                            viewModel.handleBlockTopic(userMessages, topic.id, topic.name)
                         }
                     },
                 )

@@ -23,11 +23,17 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.viewModelScope
+import com.github.zly2006.zhihu.data.DataHolder
 import com.github.zly2006.zhihu.data.Feed
 import com.github.zly2006.zhihu.data.FeedDisplayItem
+import com.github.zly2006.zhihu.data.decodeArticleContentDetail
 import com.github.zly2006.zhihu.data.flattenFeeds
 import com.github.zly2006.zhihu.data.toDisplayItem
+import com.github.zly2006.zhihu.navigation.Article
+import com.github.zly2006.zhihu.navigation.ArticleType
 import com.github.zly2006.zhihu.platform.UserMessageSink
+import com.github.zly2006.zhihu.ui.toPeopleAnswerDisplayItem
+import com.github.zly2006.zhihu.ui.toPeopleArticleDisplayItem
 import com.github.zly2006.zhihu.viewmodel.FeedDisplayEnvironment
 import com.github.zly2006.zhihu.viewmodel.HomeFeedFilterResult
 import com.github.zly2006.zhihu.viewmodel.PaginationEnvironment
@@ -37,8 +43,12 @@ import com.github.zly2006.zhihu.viewmodel.filter.BlockedTopic
 import com.github.zly2006.zhihu.viewmodel.filter.ContentDetailProvider
 import com.github.zly2006.zhihu.viewmodel.filter.getContentFilterDatabase
 import com.github.zly2006.zhihu.viewmodel.getOrFetchContentDetail
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.jsonObject
 import kotlin.reflect.typeOf
 
 abstract class BaseFeedViewModel : PaginationViewModel<Feed>(typeOf<Feed>()) {
@@ -50,7 +60,12 @@ abstract class BaseFeedViewModel : PaginationViewModel<Feed>(typeOf<Feed>()) {
 
     override fun processResponse(environment: PaginationEnvironment, data: List<Feed>, rawData: JsonArray) {
         super.processResponse(environment, data, rawData)
-        val loadedItems = data.flattenFeeds().map { createDisplayItem(environment, it) }
+        // 本 fork：「隐藏」模式在所有信息流页面生效（上游只在首页 HomeFeedViewModel 里处理），不留「已屏蔽」占位
+        val hideQualityFiltered = environment.feedDisplaySettings().qualityFilterMode == QualityFilterMode.HIDE
+        val loadedItems = data
+            .flattenFeeds()
+            .map { createDisplayItem(environment, it) }
+            .filterNot { hideQualityFiltered && it.isQualityFiltered }
         addDisplayItems(loadedItems)
         latestLoadedDisplayItems.value = loadedItems
     }
@@ -71,11 +86,39 @@ abstract class BaseFeedViewModel : PaginationViewModel<Feed>(typeOf<Feed>()) {
         isLoading = true
         try {
             fetchFeeds(environment)
+            // 本 fork：第一页到了就收起下拉刷新圈，后面几页在列表底部接着加载
+            isPullToRefresh = false
+            repeat(pagesPerRefresh - 1) {
+                if (errorMessage != null || isEnd) return@repeat
+                isLoading = true
+                fetchFeeds(environment)
+            }
         } catch (e: Exception) {
             errorHandle(e)
         }
         isLoading = false
         isPullToRefresh = false
+    }
+
+    /** 首页加载失败（如断网）且列表为空时，显示联网时离线保存的回答和文章 */
+    protected suspend fun showOfflineItemsIfEmpty(environment: PaginationEnvironment) {
+        if (displayItems.isNotEmpty()) return
+        val offlineItems = runCatching { getContentFilterDatabase().offlineContentDao().recentReadable(100) }
+            .getOrDefault(emptyList())
+            .mapNotNull { record ->
+                runCatching {
+                    val type = if (record.type == "answer") ArticleType.Answer else ArticleType.Article
+                    val article = Article(type = type, id = record.key.substringAfter(':').toLong())
+                    when (val content = decodeArticleContentDetail(article, Json.parseToJsonElement(record.json).jsonObject)) {
+                        is DataHolder.Answer -> content.toPeopleAnswerDisplayItem()
+                        is DataHolder.Article -> content.toPeopleArticleDisplayItem()
+                        else -> null
+                    }?.let { it.copy(details = "离线 · ${it.details}") }
+                }.getOrNull()
+            }
+        // 离线保存的内容包含当初被屏蔽的条目，按当前屏蔽设置重新过滤
+        val filteredItems = runCatching { environment.applyBackgroundHomeFeedFilter(offlineItems) }.getOrDefault(offlineItems)
+        withContext(Dispatchers.Main) { addDisplayItems(filteredItems) }
     }
 
     open fun createDisplayItem(environment: FeedDisplayEnvironment, feed: Feed): FeedDisplayItem {

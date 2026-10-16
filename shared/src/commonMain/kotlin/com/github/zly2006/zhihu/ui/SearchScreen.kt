@@ -829,7 +829,7 @@ fun SearchScreen(
                         }
                     }
 
-                    val showRefreshFab = remember { settings.getBoolean("showRefreshFab", true) }
+                    val showRefreshFab = remember { settings.getBoolean("showRefreshFab", false) }
                     if (showRefreshFab) {
                         DraggableRefreshButton(
                             onClick = {

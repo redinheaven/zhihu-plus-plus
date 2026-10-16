@@ -91,6 +91,10 @@ abstract class PaginationViewModel<T : Any>(
     open val isEnd: Boolean get() = lastPaging?.isEnd == true
     protected abstract val initialUrl: String
     private var currentJob: Job? = null
+    private var refreshChainJob: Job? = null
+
+    /** 每次刷新连续加载的页数；首页设为 2，多下载一倍内容供离线阅读 */
+    protected open val pagesPerRefresh: Int = 1
     protected open val shouldLogDecodeFailures: Boolean = true
 
     protected open fun resolvePageUrl(): String = lastPaging?.next ?: initialUrl
@@ -104,12 +108,22 @@ abstract class PaginationViewModel<T : Any>(
     open fun refresh(environment: PaginationEnvironment) {
         currentJob?.cancel()
         currentJob = null
+        refreshChainJob?.cancel()
         isLoading = false
         errorMessage = null
         debugData.clear()
         allData.clear()
         lastPaging = null // 重置 lastPaging
         loadMore(environment)
+        if (pagesPerRefresh > 1) {
+            refreshChainJob = viewModelScope.launch {
+                repeat(pagesPerRefresh - 1) {
+                    currentJob?.join()
+                    if (errorMessage != null || isEnd || isLoading) return@launch
+                    loadMore(environment)
+                }
+            }
+        }
     }
 
     protected open fun handlePageMetadata(json: JsonObject) = Unit

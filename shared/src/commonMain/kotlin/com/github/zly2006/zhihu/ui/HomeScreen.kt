@@ -137,6 +137,7 @@ import com.github.zly2006.zhihu.reading.RegisterReadingQueueSource
 import com.github.zly2006.zhihu.ui.components.AnnouncementCard
 import com.github.zly2006.zhihu.ui.components.AnnouncementCardDefaults
 import com.github.zly2006.zhihu.ui.components.BlockByKeywordsDialog
+import com.github.zly2006.zhihu.ui.components.BlockTopicMenuItems
 import com.github.zly2006.zhihu.ui.components.DraggableRefreshButton
 import com.github.zly2006.zhihu.ui.components.FeedAuthorBlockConfirmDialog
 import com.github.zly2006.zhihu.ui.components.FeedAuthorBlockRequest
@@ -187,6 +188,7 @@ import kotlin.time.Clock
 const val PREFERENCE_NAME = "com.github.zly2006.zhihu_preferences"
 const val ARTICLE_USE_WEBVIEW_PREFERENCE_KEY = "webviewRenderLegacy"
 const val HOME_TOP_ACTIONS_TAG = "home_top_actions"
+private const val SHOW_HOME_CREATE_FAB = false
 const val HOME_SEARCH_BUTTON_TAG = "home_search_button"
 const val HOME_CREATE_FAB_TAG = "home_create_fab"
 const val HOME_CREATE_MENU_TAG = "home_create_menu"
@@ -251,7 +253,7 @@ fun HomeScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
 
     val duo3HomeAccount = settings.getBoolean("duo3_home_account", false)
-    val showRefreshFab = settings.getBoolean("showRefreshFab", true)
+    val showRefreshFab = settings.getBoolean("showRefreshFab", false)
     val autoRefreshOnStartup = settings.getBoolean(AUTO_REFRESH_HOME_ON_STARTUP_PREFERENCE_KEY, true)
     val showUnreadBadge = notificationSettings.getUnreadBadgeEnabled()
     var showAccountBottomSheet by remember { mutableStateOf(false) }
@@ -354,7 +356,7 @@ fun HomeScreen(
     LaunchedEffect(completedPageCount) {
         if (completedPageCount > 0 &&
             currentRecommendationMode == RecommendationMode.WEB &&
-            settings.getString(QUALITY_FILTER_MODE_PREFERENCE_KEY, QualityFilterMode.RULES.name) == QualityFilterMode.HIDE.name &&
+            settings.getString(QUALITY_FILTER_MODE_PREFERENCE_KEY, QualityFilterMode.HIDE.name) == QualityFilterMode.HIDE.name &&
             viewModel.displayItems.isEmpty() &&
             !viewModel.isEnd
         ) {
@@ -913,14 +915,9 @@ fun HomeScreen(
                                 is DataHolder.Pin -> raw.topics ?: emptyList()
                                 else -> emptyList()
                             }
-                            topics.forEach { topic ->
-                                DropdownMenuItem(
-                                    text = { Text("屏蔽「${topic.name}」") },
-                                    onClick = {
-                                        dismissMenu()
-                                        viewModel.handleBlockTopic(userMessages, topic.id, topic.name)
-                                    },
-                                )
+                            BlockTopicMenuItems(topics) { topic ->
+                                dismissMenu()
+                                viewModel.handleBlockTopic(userMessages, topic.id, topic.name)
                             }
                         },
                     ) { clickedItem, destination ->
@@ -985,97 +982,100 @@ fun HomeScreen(
             )
         }
 
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(
-                    end = 16.dp,
-                    bottom = innerPadding.calculateBottomPadding() + readingPlayerOverlayPadding + 16.dp,
-                ),
-            horizontalAlignment = Alignment.End,
-        ) {
-            AnimatedVisibility(
-                visible = showCreateMenu,
-                enter = fadeIn(animationSpec = tween(durationMillis = 120)) +
-                    scaleIn(
-                        initialScale = 0.92f,
-                        transformOrigin = TransformOrigin(1f, 1f),
-                        animationSpec = tween(durationMillis = 180),
-                    ) +
-                    slideInVertically(animationSpec = tween(durationMillis = 180)) { it / 8 },
-                exit = fadeOut(animationSpec = tween(durationMillis = 90)) +
-                    scaleOut(
-                        targetScale = 0.96f,
-                        transformOrigin = TransformOrigin(1f, 1f),
-                        animationSpec = tween(durationMillis = 120),
-                    ) +
-                    slideOutVertically(animationSpec = tween(durationMillis = 120)) { it / 8 },
+        // 本 fork 不显示创作按钮：其中「提问题」「写回答」上游尚未实现，只剩「发想法」
+        if (SHOW_HOME_CREATE_FAB) {
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(
+                        end = 16.dp,
+                        bottom = innerPadding.calculateBottomPadding() + readingPlayerOverlayPadding + 16.dp,
+                    ),
+                horizontalAlignment = Alignment.End,
             ) {
-                Column(horizontalAlignment = Alignment.End) {
-                    Surface(
-                        modifier = Modifier
-                            .width(180.dp)
-                            .testTag(HOME_CREATE_MENU_TAG),
-                        shape = RoundedCornerShape(16.dp),
-                        color = MaterialTheme.colorScheme.surfaceContainer,
-                        tonalElevation = 6.dp,
-                        shadowElevation = 6.dp,
-                    ) {
-                        Column {
-                            DropdownMenuItem(
-                                modifier = Modifier.testTag(HOME_WRITE_QUESTION_BUTTON_TAG),
-                                text = { Text("提问题") },
-                                leadingIcon = {
-                                    Icon(Icons.AutoMirrored.Default.HelpOutline, contentDescription = null)
-                                },
-                                onClick = {
-                                    showCreateMenu = false
-                                    userMessages.showShortMessage("正在施工")
-                                },
-                            )
-                            DropdownMenuItem(
-                                modifier = Modifier.testTag(HOME_WRITE_ANSWER_BUTTON_TAG),
-                                text = { Text("写回答") },
-                                leadingIcon = {
-                                    Icon(Icons.Default.Edit, contentDescription = null)
-                                },
-                                onClick = {
-                                    showCreateMenu = false
-                                    userMessages.showShortMessage("正在施工")
-                                },
-                            )
-                            DropdownMenuItem(
-                                modifier = Modifier.testTag(HOME_WRITE_PIN_BUTTON_TAG),
-                                text = { Text("发想法") },
-                                leadingIcon = {
-                                    Icon(Icons.Default.MarkUnreadChatAlt, contentDescription = null)
-                                },
-                                onClick = {
-                                    showCreateMenu = false
-                                    navigator.onNavigate(WritePin())
-                                },
-                            )
+                AnimatedVisibility(
+                    visible = showCreateMenu,
+                    enter = fadeIn(animationSpec = tween(durationMillis = 120)) +
+                        scaleIn(
+                            initialScale = 0.92f,
+                            transformOrigin = TransformOrigin(1f, 1f),
+                            animationSpec = tween(durationMillis = 180),
+                        ) +
+                        slideInVertically(animationSpec = tween(durationMillis = 180)) { it / 8 },
+                    exit = fadeOut(animationSpec = tween(durationMillis = 90)) +
+                        scaleOut(
+                            targetScale = 0.96f,
+                            transformOrigin = TransformOrigin(1f, 1f),
+                            animationSpec = tween(durationMillis = 120),
+                        ) +
+                        slideOutVertically(animationSpec = tween(durationMillis = 120)) { it / 8 },
+                ) {
+                    Column(horizontalAlignment = Alignment.End) {
+                        Surface(
+                            modifier = Modifier
+                                .width(180.dp)
+                                .testTag(HOME_CREATE_MENU_TAG),
+                            shape = RoundedCornerShape(16.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainer,
+                            tonalElevation = 6.dp,
+                            shadowElevation = 6.dp,
+                        ) {
+                            Column {
+                                DropdownMenuItem(
+                                    modifier = Modifier.testTag(HOME_WRITE_QUESTION_BUTTON_TAG),
+                                    text = { Text("提问题") },
+                                    leadingIcon = {
+                                        Icon(Icons.AutoMirrored.Default.HelpOutline, contentDescription = null)
+                                    },
+                                    onClick = {
+                                        showCreateMenu = false
+                                        userMessages.showShortMessage("正在施工")
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    modifier = Modifier.testTag(HOME_WRITE_ANSWER_BUTTON_TAG),
+                                    text = { Text("写回答") },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.Edit, contentDescription = null)
+                                    },
+                                    onClick = {
+                                        showCreateMenu = false
+                                        userMessages.showShortMessage("正在施工")
+                                    },
+                                )
+                                DropdownMenuItem(
+                                    modifier = Modifier.testTag(HOME_WRITE_PIN_BUTTON_TAG),
+                                    text = { Text("发想法") },
+                                    leadingIcon = {
+                                        Icon(Icons.Default.MarkUnreadChatAlt, contentDescription = null)
+                                    },
+                                    onClick = {
+                                        showCreateMenu = false
+                                        navigator.onNavigate(WritePin())
+                                    },
+                                )
+                            }
                         }
+                        Spacer(modifier = Modifier.height(12.dp))
                     }
-                    Spacer(modifier = Modifier.height(12.dp))
                 }
-            }
-            val createFabOpacity = remember(settings) {
-                settings.getInt(PREF_FAB_OPACITY, DEFAULT_FAB_OPACITY).coerceIn(10, 100) / 100f
-            }
-            FloatingActionButton(
-                modifier = Modifier.testTag(HOME_CREATE_FAB_TAG),
-                onClick = { showCreateMenu = !showCreateMenu },
-                shape = CircleShape,
-                containerColor = FloatingActionButtonDefaults.containerColor.copy(alpha = createFabOpacity),
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = createFabOpacity),
-                elevation = if (createFabOpacity < 1f) {
-                    FloatingActionButtonDefaults.elevation(0.dp, 0.dp, 0.dp, 0.dp)
-                } else {
-                    FloatingActionButtonDefaults.elevation()
-                },
-            ) {
-                Icon(Icons.Default.Add, contentDescription = "创作")
+                val createFabOpacity = remember(settings) {
+                    settings.getInt(PREF_FAB_OPACITY, DEFAULT_FAB_OPACITY).coerceIn(10, 100) / 100f
+                }
+                FloatingActionButton(
+                    modifier = Modifier.testTag(HOME_CREATE_FAB_TAG),
+                    onClick = { showCreateMenu = !showCreateMenu },
+                    shape = CircleShape,
+                    containerColor = FloatingActionButtonDefaults.containerColor.copy(alpha = createFabOpacity),
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = createFabOpacity),
+                    elevation = if (createFabOpacity < 1f) {
+                        FloatingActionButtonDefaults.elevation(0.dp, 0.dp, 0.dp, 0.dp)
+                    } else {
+                        FloatingActionButtonDefaults.elevation()
+                    },
+                ) {
+                    Icon(Icons.Default.Add, contentDescription = "创作")
+                }
             }
         }
     }

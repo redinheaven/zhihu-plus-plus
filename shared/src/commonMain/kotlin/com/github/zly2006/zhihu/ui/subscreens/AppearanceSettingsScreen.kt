@@ -711,7 +711,7 @@ fun AppearanceSettingsScreen(
             }
 
             // ── 信息流 ──────────────────────────────────────────────────────────
-            val showRefreshFab = remember { mutableStateOf(settings.getBoolean("showRefreshFab", true)) }
+            val showRefreshFab = remember { mutableStateOf(settings.getBoolean("showRefreshFab", false)) }
             SettingItemGroup(
                 title = "信息流",
             ) {
@@ -793,7 +793,7 @@ fun AppearanceSettingsScreen(
             }
 
             // ── 回答页 ──────────────────────────────────────────────────────────
-            val buttonSkipAnswer = remember { mutableStateOf(settings.getBoolean("buttonSkipAnswer", true)) }
+            val buttonSkipAnswer = remember { mutableStateOf(settings.getBoolean("buttonSkipAnswer", false)) }
             SettingItemGroup(
                 title = "回答页",
             ) {
@@ -877,7 +877,7 @@ fun AppearanceSettingsScreen(
                 )
 
                 val autoHideArticleBottomBar = remember {
-                    mutableStateOf(settings.getBoolean("autoHideArticleBottomBar", false))
+                    mutableStateOf(settings.getBoolean("autoHideArticleBottomBar", true))
                 }
                 SettingItemWithSwitch(
                     title = { Text("自动隐藏回答底部按钮") },

@@ -250,8 +250,8 @@ fun ContentFilterSettingsScreen(
                 val qualityFilterMode = remember {
                     mutableStateOf(
                         QualityFilterMode.entries.firstOrNull {
-                            it.name == settings.getString(QUALITY_FILTER_MODE_PREFERENCE_KEY, QualityFilterMode.RULES.name)
-                        } ?: QualityFilterMode.RULES,
+                            it.name == settings.getString(QUALITY_FILTER_MODE_PREFERENCE_KEY, QualityFilterMode.HIDE.name)
+                        } ?: QualityFilterMode.HIDE,
                     )
                 }
                 val qualityFilterModeOptions = listOf(

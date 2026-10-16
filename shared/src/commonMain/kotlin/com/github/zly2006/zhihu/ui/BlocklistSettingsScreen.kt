@@ -141,7 +141,7 @@ fun BlocklistSettingsScreen(
     var selectedTab by remember { mutableIntStateOf(0) }
     val tabs = buildList {
         add("屏蔽关键词")
-        if (nlpSupported) add("NLP智能屏蔽")
+        if (nlpSupported) add("AI 屏蔽主题")
         add("屏蔽用户")
         add("屏蔽提问者")
         add("屏蔽主题")

@@ -42,6 +42,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -54,14 +55,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import com.github.zly2006.zhihu.navigation.Account
+import com.github.zly2006.zhihu.navigation.LocalNavigator
 import com.github.zly2006.zhihu.nlp.KeywordWithWeight
+import com.github.zly2006.zhihu.viewmodel.filter.KeywordScope
+import com.github.zly2006.zhihu.viewmodel.filter.KeywordType
 import kotlin.math.roundToInt
 
 /**
  * 按关键词屏蔽的信息流辅助弹窗。
  *
- * 弹窗展示从标题和摘要中提取的关键词，默认选择前三个，允许用户组合成一个 NLP 屏蔽短语。它用于把 Feed 卡片上的一次性“屏蔽”
- * 操作转化为可维护的规则，因此需要同时展示加载态、添加态和关键词权重详情。
+ * 用户可以手动输入，也可以点「Jev 建议」让 Jev 从标题和摘要中挑出关键词再点选（只在点击时联网请求）；按「普通屏蔽词」（可选匹配范围，每个词一条规则）或
+ * 「AI 主题」（Jev 语义判断，合成一条规则）添加。它把 Feed 卡片上的一次性“屏蔽”操作转化为可维护的规则。
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -69,23 +74,34 @@ fun BlockByKeywordsDialogContent(
     showDialog: Boolean,
     feedTitle: String,
     feedExcerpt: String?,
-    extractedKeywords: List<String>,
+    extractedKeywords: List<String>?,
     keywordInfoList: List<KeywordWithWeight>,
     isLoading: Boolean,
     isAdding: Boolean,
     onDismiss: () -> Unit,
-    onConfirmPhrase: (String) -> Unit,
+    onRequestSuggestions: () -> Unit,
+    onConfirmKeywords: (keywords: List<String>, type: KeywordType, scope: KeywordScope) -> Unit,
 ) {
+    val navigator = LocalNavigator.current
     var selectedKeywords by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var manualInput by remember { mutableStateOf("") }
+    var aiMode by remember { mutableStateOf(false) }
+    var scope by remember { mutableStateOf(KeywordScope.ALL) }
     var showDetailDialog by remember { mutableStateOf(false) }
 
-    LaunchedEffect(showDialog, extractedKeywords) {
-        if (showDialog) {
-            selectedKeywords = extractedKeywords.take(3).toSet()
-        } else {
+    LaunchedEffect(showDialog) {
+        if (!showDialog) {
             selectedKeywords = emptySet()
+            manualInput = ""
             showDetailDialog = false
         }
+    }
+
+    // 普通屏蔽词：手动输入（空格分隔）和点选的关键词各自成为一条；AI 主题：优先用手动输入的一句话，否则把点选的词连成一句
+    val keywords = if (aiMode) {
+        listOfNotNull(manualInput.trim().ifBlank { selectedKeywords.joinToString(" ").ifBlank { null } })
+    } else {
+        (manualInput.split(Regex("\\s+")) + selectedKeywords).map { it.trim() }.filter { it.isNotEmpty() }.distinct()
     }
 
     if (showDialog) {
@@ -98,43 +114,56 @@ fun BlockByKeywordsDialogContent(
                         .fillMaxWidth()
                         .verticalScroll(rememberScrollState()),
                 ) {
-                    if (isLoading) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(32.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                        ) {
-                            CircularProgressIndicator()
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Text("正在提取关键词...")
-                        }
-                    } else if (extractedKeywords.isEmpty()) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                        ) {
-                            Text(
-                                "未能提取到关键词",
-                                color = MaterialTheme.colorScheme.error,
-                            )
-                        }
-                    } else {
-                        Text(
-                            "从内容中提取到以下关键词，选择要屏蔽的关键词：",
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
+                    FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        FilterChip(selected = !aiMode, onClick = { aiMode = false }, label = { Text("普通屏蔽词") })
+                        FilterChip(selected = aiMode, onClick = { aiMode = true }, label = { Text("AI 主题（Jev）") })
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = manualInput,
+                        onValueChange = { manualInput = it },
+                        label = { Text(if (aiMode) "一句话描述要屏蔽的主题" else "手动输入屏蔽词") },
+                        placeholder = { Text(if (aiMode) "如：减肥方法和体重管理" else "多个词用空格分隔") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = !aiMode,
+                    )
+                    if (!aiMode) {
                         Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            "提示：选中的关键词将用空格串联成一个短语进行NLP语义匹配",
+                        Text("匹配范围", style = MaterialTheme.typography.labelLarge)
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            KeywordScope.entries.forEach { option ->
+                                FilterChip(
+                                    selected = scope == option,
+                                    onClick = { scope = option },
+                                    label = { Text(option.label) },
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("关键词建议（可点选）", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+                        if (extractedKeywords.isNullOrEmpty()) {
+                            TextButton(onClick = onRequestSuggestions, enabled = !isLoading) { Text("Jev 建议") }
+                        }
+                    }
+                    when {
+                        isLoading -> Row(verticalAlignment = Alignment.CenterVertically) {
+                            CircularProgressIndicator(modifier = Modifier.width(16.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Jev 正在挑选关键词...", style = MaterialTheme.typography.bodySmall)
+                        }
+                        extractedKeywords == null -> Text(
+                            "点「Jev 建议」会把标题和摘要发给 TypeSafe，由 Jev 挑出关键词",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.primary,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        Spacer(modifier = Modifier.height(12.dp))
-
-                        FlowRow(
+                        extractedKeywords.isEmpty() -> Text(
+                            "未能提取到关键词，可直接手动输入",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        else -> FlowRow(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalArrangement = Arrangement.spacedBy(8.dp),
                         ) {
@@ -143,11 +172,7 @@ fun BlockByKeywordsDialogContent(
                                 FilterChip(
                                     selected = isSelected,
                                     onClick = {
-                                        selectedKeywords = if (isSelected) {
-                                            selectedKeywords - keyword
-                                        } else {
-                                            selectedKeywords + keyword
-                                        }
+                                        selectedKeywords = if (isSelected) selectedKeywords - keyword else selectedKeywords + keyword
                                     },
                                     label = { Text(keyword) },
                                     leadingIcon = {
@@ -159,41 +184,21 @@ fun BlockByKeywordsDialogContent(
                                 )
                             }
                         }
-
-                        if (selectedKeywords.isNotEmpty()) {
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Card(
-                                modifier = Modifier.fillMaxWidth(),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.primaryContainer,
-                                ),
-                            ) {
-                                Column(
-                                    modifier = Modifier.padding(12.dp),
-                                ) {
-                                    Text(
-                                        "短语预览",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    )
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        selectedKeywords.sorted().joinToString(" "),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        fontWeight = FontWeight.Medium,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    )
-                                }
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            "提示：基于NLP语义相似度，即使用词不同，主题相似的内容也会被过滤",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
                     }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        if (aiMode) {
+                            "AI 主题由 Jev 联网判断内容是否属于该主题，用词不同也能屏蔽；描述越具体越准"
+                        } else {
+                            "普通屏蔽词按文字匹配，每个词单独成为一条规则"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    TextButton(onClick = {
+                        onDismiss()
+                        navigator.onNavigate(Account.RecommendSettings.Blocklist)
+                    }) { Text("管理全部屏蔽规则") }
                 }
             },
             confirmButton = {
@@ -213,12 +218,8 @@ fun BlockByKeywordsDialogContent(
                     }
 
                     Button(
-                        onClick = {
-                            if (selectedKeywords.isNotEmpty()) {
-                                onConfirmPhrase(selectedKeywords.sorted().joinToString(" "))
-                            }
-                        },
-                        enabled = selectedKeywords.isNotEmpty() && !isLoading && !isAdding,
+                        onClick = { onConfirmKeywords(keywords, if (aiMode) KeywordType.NLP_SEMANTIC else KeywordType.EXACT_MATCH, scope) },
+                        enabled = keywords.isNotEmpty() && !isAdding,
                     ) {
                         if (isAdding) {
                             CircularProgressIndicator(
@@ -226,7 +227,7 @@ fun BlockByKeywordsDialogContent(
                                 color = MaterialTheme.colorScheme.onPrimary,
                             )
                         } else {
-                            Text("屏蔽 (${selectedKeywords.size})")
+                            Text(if (aiMode) "屏蔽" else "屏蔽 (${keywords.size})")
                         }
                     }
                 }
@@ -323,7 +324,7 @@ fun KeywordDetailDialog(
 
                 Spacer(modifier = Modifier.height(12.dp))
                 Text(
-                    "说明：权重值由TextRank算法计算得出，数值越高表示该关键词在内容中越重要",
+                    "说明：数值是 Jev 判断该词属于内容具体话题的概率，越高越能代表这条内容",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )

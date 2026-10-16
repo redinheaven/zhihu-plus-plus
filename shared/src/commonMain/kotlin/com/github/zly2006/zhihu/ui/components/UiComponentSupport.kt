@@ -21,11 +21,16 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -45,6 +50,8 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.DpOffset
+import androidx.compose.ui.unit.dp
+import com.github.zly2006.zhihu.data.DataHolder
 import com.github.zly2006.zhihu.data.FeedDisplayItem
 import com.github.zly2006.zhihu.nlp.KeywordWithWeight
 import com.github.zly2006.zhihu.platform.rememberImageSaver
@@ -68,6 +75,30 @@ expect suspend fun extractFeedKeywords(
 ): List<KeywordWithWeight>
 
 expect val feedKeywordExtractionAvailable: Boolean
+
+/** 卡片菜单里的「屏蔽话题」：默认收起，点开后在菜单内列出各话题，避免话题多时菜单占满屏幕。 */
+@Composable
+fun BlockTopicMenuItems(
+    topics: List<DataHolder.Topic>,
+    onBlock: (DataHolder.Topic) -> Unit,
+) {
+    if (topics.isEmpty()) return
+    var expanded by remember { mutableStateOf(false) }
+    DropdownMenuItem(
+        text = { Text("屏蔽话题（${topics.size}）") },
+        trailingIcon = { Icon(if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore, contentDescription = null) },
+        onClick = { expanded = !expanded },
+    )
+    if (expanded) {
+        topics.forEach { topic ->
+            DropdownMenuItem(
+                text = { Text(topic.name) },
+                onClick = { onBlock(topic) },
+                contentPadding = PaddingValues(start = 32.dp, end = 12.dp),
+            )
+        }
+    }
+}
 
 @Composable
 fun FeedAuthorBlockConfirmDialog(
@@ -165,26 +196,11 @@ fun BlockByKeywordsDialog(
     val coroutineScope = rememberCoroutineScope()
     val database = remember { getContentFilterDatabase() }
 
-    var extractedKeywords by remember { mutableStateOf<List<String>>(emptyList()) }
-    var keywordInfoList by remember { mutableStateOf<List<KeywordWithWeight>>(emptyList()) }
+    // null 表示还没请求过；关键词建议要把内容发给 Jev，所以只在用户点「Jev 建议」时请求
+    var extractedKeywords by remember(feedTitle, feedExcerpt) { mutableStateOf<List<String>?>(null) }
+    var keywordInfoList by remember(feedTitle, feedExcerpt) { mutableStateOf<List<KeywordWithWeight>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
     var isAdding by remember { mutableStateOf(false) }
-
-    LaunchedEffect(showDialog, feedTitle, feedExcerpt) {
-        if (showDialog) {
-            isLoading = true
-            try {
-                val keywordsWithWeight = extractFeedKeywords(feedTitle, feedExcerpt)
-                keywordInfoList = keywordsWithWeight
-                extractedKeywords = keywordsWithWeight.take(8).map { it.keyword }
-            } catch (e: Exception) {
-                Log.e("FeedBlocking", "Failed to extract block keywords", e)
-                userMessages.showShortMessage("提取关键词失败: ${e.message}")
-            } finally {
-                isLoading = false
-            }
-        }
-    }
 
     BlockByKeywordsDialogContent(
         showDialog = showDialog,
@@ -195,17 +211,32 @@ fun BlockByKeywordsDialog(
         isLoading = isLoading,
         isAdding = isAdding,
         onDismiss = onDismiss,
-        onConfirmPhrase = { phrase ->
+        onRequestSuggestions = {
+            isLoading = true
+            coroutineScope.launch {
+                try {
+                    val keywordsWithWeight = extractFeedKeywords(feedTitle, feedExcerpt)
+                    keywordInfoList = keywordsWithWeight
+                    extractedKeywords = keywordsWithWeight.take(8).map { it.keyword }
+                } catch (e: Exception) {
+                    Log.e("FeedBlocking", "Failed to extract block keywords", e)
+                    userMessages.showShortMessage("提取关键词失败: ${e.message}")
+                } finally {
+                    isLoading = false
+                }
+            }
+        },
+        onConfirmKeywords = { keywords, type, scope ->
             isAdding = true
             coroutineScope.launch {
                 try {
-                    database.blockedKeywordDao().insertKeyword(
-                        BlockedKeyword(
-                            keyword = phrase.trim(),
-                            keywordType = KeywordType.NLP_SEMANTIC.name,
-                        ),
-                    )
-                    userMessages.showShortMessage("已添加NLP屏蔽短语: $phrase")
+                    keywords.forEach { keyword ->
+                        database.blockedKeywordDao().insertKeyword(
+                            BlockedKeyword(keyword = keyword, keywordType = type.name, scope = scope.name),
+                        )
+                    }
+                    val kind = if (type == KeywordType.NLP_SEMANTIC) "AI 屏蔽主题" else "屏蔽词"
+                    userMessages.showShortMessage("已添加$kind：${keywords.joinToString("、")}")
                     onConfirm()
                 } catch (e: Exception) {
                     Log.e("FeedBlocking", "Failed to add NLP block phrase", e)

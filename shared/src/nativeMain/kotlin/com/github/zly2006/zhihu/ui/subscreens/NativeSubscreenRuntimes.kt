@@ -220,3 +220,10 @@ actual fun WebViewCustomFontSettings(
 ) {
     error("$platformName 暂不支持 WebView 自定义字体设置")
 }
+
+actual val isCloudFileSyncSupported: Boolean = false
+
+@Composable
+actual fun CloudFileSyncSettings() {
+    error("$platformName 暂不支持云盘文件同步")
+}

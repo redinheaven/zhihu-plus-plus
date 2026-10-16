@@ -62,6 +62,7 @@ class AndroidHomeFeedViewModel :
     HomeFeedInteractionViewModel {
     override val initialUrl: String
         get() = "https://api.zhihu.com/topstory/recommend"
+    override val pagesPerRefresh = 2
 
     public override suspend fun fetchFeeds(environment: PaginationEnvironment) {
         try {
@@ -119,6 +120,7 @@ class AndroidHomeFeedViewModel :
         } catch (e: Exception) {
             if (e !is CancellationException) {
                 environment.handleMobileHomeFeedFailure(e)
+                showOfflineItemsIfEmpty(environment)
             }
             throw e
         } finally {
@@ -227,6 +229,8 @@ fun parseMobileHomeFeedDisplayItem(card: JsonObject): FeedDisplayItem? {
         .jsonObject["url"]!!
         .jsonPrimitive.content
     val authorName = lineAuthor.joStrMatch("type", "Text")["text"]!!.jsonPrimitive.content
+    // 本 fork：推荐接口的广告卡长得和普通卡一样，只在作者位置写「广告 · 点击立即体验」，按这个丢掉
+    if (authorName.startsWith("广告")) return null
     if (routeDest is Article) {
         routeDest.authorName = authorName
         routeDest.title = title
@@ -286,7 +290,7 @@ fun parseMobileHomeFeedDisplayItem(card: JsonObject): FeedDisplayItem? {
         authorName = authorName,
         summary = summary,
         title = title,
-        details = "$footerText · 手机版推荐",
+        details = footerText,
         feed = feed,
     )
 }

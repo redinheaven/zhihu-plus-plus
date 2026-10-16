@@ -42,6 +42,7 @@ import androidx.compose.material.icons.automirrored.filled.Login
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.ArrowOutward
+import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Code
@@ -99,6 +100,7 @@ import com.github.zly2006.zhihu.ui.components.SettingItemGroup
 import com.github.zly2006.zhihu.ui.components.pageTurnViewportWithGuide
 import com.github.zly2006.zhihu.ui.components.rememberPageTurnTarget
 import com.github.zly2006.zhihu.ui.subscreens.BOTTOM_BAR_ITEMS_PREFERENCE_KEY
+import com.github.zly2006.zhihu.ui.subscreens.CLOUD_SYNC_LAST_ERROR_KEY
 import com.github.zly2006.zhihu.ui.subscreens.SystemUpdateState
 import com.github.zly2006.zhihu.ui.subscreens.defaultBottomBarSelectionKeys
 import com.github.zly2006.zhihu.ui.subscreens.normalizeBottomBarSelection
@@ -513,8 +515,23 @@ fun AccountSettingScreen(
                 )
 
                 SettingItem(
+                    title = { Text("屏蔽列表") },
+                    description = { Text("屏蔽词、AI 屏蔽主题、屏蔽用户和话题") },
+                    icon = { Icon(Icons.Default.Block, null) },
+                    onClick = { navigator.onNavigate(Account.RecommendSettings.Blocklist) },
+                )
+
+                // 自动同步失败只弹一次 Toast，这里留个持续的提示
+                val cloudSyncFailed = remember { settings.getStringOrNull(CLOUD_SYNC_LAST_ERROR_KEY) != null }
+                SettingItem(
                     title = { Text("系统与更新") },
-                    description = { Text("GitHub、更新设置等") },
+                    description = {
+                        if (cloudSyncFailed) {
+                            Text("数据同步失败，点开查看", color = MaterialTheme.colorScheme.error)
+                        } else {
+                            Text("数据同步、遥测、防沉迷等")
+                        }
+                    },
                     icon = { Icon(Icons.Default.Settings, null) },
                     modifier = Modifier.testTag(ACCOUNT_SETTINGS_SYSTEM_TAG),
                     onClick = { navigator.onNavigate(Account.SystemAndUpdateSettings()) },
@@ -547,7 +564,7 @@ fun AccountSettingScreen(
                 footer = { Text("本软件仅供学习交流使用，应用内内容由知乎网站提供，著作权归其对应作者所有。") },
             ) {
                 SettingItem(
-                    title = { Text("知乎++") },
+                    title = { Text("知乎++ Jev") },
                     description = { Text("版本号：$versionInfo") },
                     icon = {
                         Image(
@@ -576,10 +593,10 @@ fun AccountSettingScreen(
                 )
                 SettingItem(
                     title = { Text("GitHub 项目地址") },
-                    description = { Text("https://github.com/zly2006/zhihu-plus-plus") },
+                    description = { Text("https://github.com/redinheaven/zhihu-plus-plus\n基于 zly2006/zhihu-plus-plus 修改") },
                     icon = { Icon(painterResource(Res.drawable.ic_github_24dp), null) },
                     onClick = {
-                        openSystemUrl("https://github.com/zly2006/zhihu-plus-plus")
+                        openSystemUrl("https://github.com/redinheaven/zhihu-plus-plus")
                     },
                     endAction = {
                         Icon(

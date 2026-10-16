@@ -21,10 +21,12 @@ import android.annotation.SuppressLint
 import android.app.AlertDialog
 import android.content.ClipData
 import android.content.Intent
+import android.net.ConnectivityManager
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
 import android.view.KeyEvent
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Box
@@ -44,9 +46,12 @@ import coil3.SingletonImageLoader
 import coil3.disk.DiskCache
 import coil3.disk.directory
 import coil3.memory.MemoryCache
+import coil3.request.CachePolicy
+import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.github.zly2006.zhihu.data.AccountData
 import com.github.zly2006.zhihu.data.HistoryStorage
+import com.github.zly2006.zhihu.data.offlineImagePrefetcher
 import com.github.zly2006.zhihu.filter.ContentOpenEventSupport
 import com.github.zly2006.zhihu.navigation.Article
 import com.github.zly2006.zhihu.navigation.ArticleType
@@ -77,6 +82,7 @@ import com.github.zly2006.zhihu.ui.components.PageTurnDispatcher
 import com.github.zly2006.zhihu.ui.components.PageTurnFab
 import com.github.zly2006.zhihu.ui.components.getHighestQualityVideoUrl
 import com.github.zly2006.zhihu.ui.subscreens.PREF_VOLUME_KEY_PAGE_TURN
+import com.github.zly2006.zhihu.ui.subscreens.syncCloudFileIfDue
 import com.github.zly2006.zhihu.util.ContinuousUsageReminderManager
 import com.github.zly2006.zhihu.util.EmojiManager
 import com.github.zly2006.zhihu.util.ZHIHU_WEB_ZSE93
@@ -91,6 +97,7 @@ import com.github.zly2006.zhihu.viewmodel.filter.getContentFilterDatabase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.util.concurrent.TimeUnit
 
 class MainActivity : ComponentActivity() {
@@ -144,6 +151,23 @@ class MainActivity : ComponentActivity() {
         AndroidThemeSettings.initialize(this)
         androidKeywordSemanticMatcher = JevKeywordSemanticMatcher
         androidKeywordWeightExtractor = JevKeywordWeightExtractor
+        offlineImagePrefetcher = { urls ->
+            // 离线阅读的图片预下载只在 Wi-Fi 等不按流量计费的网络下进行；只为写入磁盘缓存，不保留内存、按极小尺寸解码
+            val appContext = applicationContext
+            if (urls.isNotEmpty() && getSystemService(ConnectivityManager::class.java)?.isActiveNetworkMetered == false) {
+                val imageLoader = SingletonImageLoader.get(appContext)
+                urls.forEach { url ->
+                    imageLoader.enqueue(
+                        ImageRequest
+                            .Builder(appContext)
+                            .data(url)
+                            .size(1, 1)
+                            .memoryCachePolicy(CachePolicy.DISABLED)
+                            .build(),
+                    )
+                }
+            }
+        }
         getContentFilterDatabase(this)
 
         val settings = androidSettingsStore(this)
@@ -189,6 +213,13 @@ class MainActivity : ComponentActivity() {
         }
         if (savedInstanceState == null) {
             telemetry(this, "start")
+            lifecycleScope.launch(Dispatchers.IO) {
+                syncCloudFileIfDue(this@MainActivity)?.onFailure {
+                    withContext(Dispatchers.Main) {
+                        Toast.makeText(this@MainActivity, "数据自动同步失败：${it.message ?: it.javaClass.simpleName}", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
             if (intent.data != null) {
                 if (intent.data!!.authority == "zhihu-plus.internal") {
                     if (intent.data!!.path == "/error") {
@@ -227,7 +258,7 @@ class MainActivity : ComponentActivity() {
                 DiskCache
                     .Builder()
                     .directory(this.cacheDir.resolve("image_cache"))
-                    .maxSizeBytes(50L * 1024 * 1024) // 50 MB
+                    .maxSizeBytes(300L * 1024 * 1024) // 300 MB，配合离线阅读保留看过的图片
                     .build()
             }.build()
             .also { loader ->

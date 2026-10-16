@@ -17,6 +17,7 @@
 
 package com.github.zly2006.zhihu.data
 
+import com.fleeksoft.ksoup.Ksoup
 import com.github.zly2006.zhihu.data.DataHolder
 import com.github.zly2006.zhihu.data.ZhihuJson
 import com.github.zly2006.zhihu.navigation.Article
@@ -25,11 +26,17 @@ import com.github.zly2006.zhihu.navigation.NavDestination
 import com.github.zly2006.zhihu.navigation.Pin
 import com.github.zly2006.zhihu.navigation.Question
 import com.github.zly2006.zhihu.util.Log
+import com.github.zly2006.zhihu.util.extractImageUrl
+import com.github.zly2006.zhihu.viewmodel.filter.OfflineContent
+import com.github.zly2006.zhihu.viewmodel.filter.getContentFilterDatabase
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
 import kotlin.coroutines.cancellation.CancellationException
@@ -97,7 +104,7 @@ object ContentDetailCache {
     /**
      * 从 NavDestination 提取内容类型和 ID
      */
-    private fun extractContentInfo(navDestination: NavDestination): Pair<String, String>? = when (navDestination) {
+    internal fun extractContentInfo(navDestination: NavDestination): Pair<String, String>? = when (navDestination) {
         is Article -> {
             val type = when (navDestination.type) {
                 ArticleType.Answer -> "answer"
@@ -113,6 +120,36 @@ object ContentDetailCache {
         }
         else -> null
     }
+}
+
+private const val OFFLINE_KEEP_DAYS = 7
+private const val OFFLINE_MAX_COUNT = 2000
+
+/**
+ * 离线保存正文时预下载其中的图片，由平台设置（Android 只在不按流量计费的网络下执行）。
+ */
+var offlineImagePrefetcher: (List<String>) -> Unit = {}
+
+/** 保存一条内容详情 JSON 供离线阅读。 */
+private suspend fun saveOfflineContent(key: String, type: String, json: JsonObject) {
+    runCatching {
+        val dao = getContentFilterDatabase().offlineContentDao()
+        val now = Clock.System.now().toEpochMilliseconds()
+        dao.upsert(OfflineContent(key, type, json.toString(), now))
+        dao.prune(before = now - OFFLINE_KEEP_DAYS * 24 * 60 * 60 * 1000L, keep = OFFLINE_MAX_COUNT)
+        val contentImages = json["content"]
+            ?.jsonPrimitive
+            ?.contentOrNull
+            ?.let { html -> Ksoup.parse(html).select("img").mapNotNull { extractImageUrl(it::attr) } }
+            .orEmpty()
+        // 作者头像一并下载，离线时卡片和正文页才有头像
+        val avatar = (json["author"] as? JsonObject)?.get("avatar_url")?.jsonPrimitive?.contentOrNull
+        (contentImages + listOfNotNull(avatar))
+            .filter { it.startsWith("http") }
+            .distinct()
+            .takeIf { it.isNotEmpty() }
+            ?.let(offlineImagePrefetcher)
+    }.onFailure { Log.e("ContentDetailCache", "Failed to save offline content $key", it) }
 }
 
 fun zhihuContentDetailUrl(destination: NavDestination): String? = when (destination) {
@@ -143,7 +180,20 @@ suspend fun fetchZhihuContentDetail(
 ): DataHolder.Content? {
     val url = zhihuContentDetailUrl(destination) ?: return null
     val include = zhihuContentDetailInclude(destination)
-    val json = fetchJson(url, include) ?: return null
+    // 离线阅读：联网时把详情原始 JSON 存进本地数据库，请求失败（如断网）时回退到已保存的版本
+    val (type, id) = ContentDetailCache.extractContentInfo(destination) ?: return null
+    val offlineKey = "$type:$id"
+    val json = try {
+        fetchJson(url, include)?.also { fetched ->
+            if (fetched.containsKey("id")) saveOfflineContent(offlineKey, type, fetched)
+        }
+    } catch (e: Exception) {
+        if (e is CancellationException) throw e
+        runCatching { getContentFilterDatabase().offlineContentDao().get(offlineKey) }
+            .getOrNull()
+            ?.let { Json.parseToJsonElement(it.json).jsonObject }
+            ?: throw e
+    } ?: return null
 
     return when (destination) {
         is Article -> decodeArticleContentDetail(destination, json)

@@ -49,6 +49,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -62,8 +64,11 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -75,6 +80,7 @@ import com.github.zly2006.zhihu.data.navDestination
 import com.github.zly2006.zhihu.data.officialBadge
 import com.github.zly2006.zhihu.data.sourceLabel
 import com.github.zly2006.zhihu.data.target
+import com.github.zly2006.zhihu.filter.ContentOpenEventSupport
 import com.github.zly2006.zhihu.navigation.Account
 import com.github.zly2006.zhihu.navigation.LocalNavigator
 import com.github.zly2006.zhihu.navigation.NavDestination
@@ -88,6 +94,7 @@ import com.github.zly2006.zhihu.ui.subscreens.PREF_FONT_SIZE
 import com.github.zly2006.zhihu.ui.subscreens.PREF_LINE_HEIGHT
 import com.github.zly2006.zhihu.util.parseEmphasizedHtmlTextWithTheme
 import com.github.zly2006.zhihu.viewmodel.QUALITY_FILTER_MODE_PREFERENCE_KEY
+import com.github.zly2006.zhihu.viewmodel.filter.getContentFilterDatabase
 
 /**
  * 信息流卡片的 Material 3 实现。
@@ -308,6 +315,21 @@ private fun FeedCardContent(
     val navigator = LocalNavigator.current
     val visiblePinImages = pinImages.takeIf { showFeedThumbnail && !item.isFiltered }.orEmpty()
     val sourceLabel = item.feed?.sourceLabel.takeUnless { item.isFiltered }
+    // 读过的内容在详情行前标出上次阅读时间
+    val readIdentity = remember(item) { item.navDestination?.let(ContentOpenEventSupport::toTrackedContentIdentity) }
+    val lastOpenedTimes by ContentOpenEventSupport.lastOpenedAt.collectAsState()
+    LaunchedEffect(Unit) {
+        runCatching { ContentOpenEventSupport.ensureLastOpenedAtLoaded(getContentFilterDatabase()) }
+    }
+    val lastReadAt = readIdentity?.let { lastOpenedTimes?.get("${it.type}:${it.id}") }
+    val readLabelColor = MaterialTheme.colorScheme.primary
+    val detailsText = buildAnnotatedString {
+        lastReadAt?.takeUnless { item.isFiltered }?.let { openedAt ->
+            withStyle(SpanStyle(color = readLabelColor)) { append("${ContentOpenEventSupport.formatReadAgo(openedAt)}读过") }
+            if (item.details.isNotEmpty()) append(" · ")
+        }
+        append(item.details)
+    }
     if (duo3CardLayout) {
         // ── 新排版（duo3）────────────────────────────────────────────────────
         if (showSourceLabel) {
@@ -410,7 +432,7 @@ private fun FeedCardContent(
                         }
                         if (item.details.isNotEmpty()) {
                             Text(
-                                text = item.details,
+                                text = detailsText,
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
@@ -492,7 +514,7 @@ private fun FeedCardContent(
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Text(
-                            text = item.details,
+                            text = detailsText,
                             fontSize = 12.sp,
                             lineHeight = 12.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,

@@ -112,6 +112,7 @@ import com.github.zly2006.zhihu.navigation.LocalNavigator
 import com.github.zly2006.zhihu.navigation.Question
 import com.github.zly2006.zhihu.navigation.Topic
 import com.github.zly2006.zhihu.platform.PlatformBackHandler
+import com.github.zly2006.zhihu.platform.UserMessageDuration
 import com.github.zly2006.zhihu.platform.isAnswerSwipeSupported
 import com.github.zly2006.zhihu.platform.isArticleHtmlExportSupported
 import com.github.zly2006.zhihu.platform.isArticleImageExportSupported
@@ -162,6 +163,7 @@ import com.github.zly2006.zhihu.viewmodel.sharedArticleAnswerSwitchState
 import com.materialkolor.ktx.harmonize
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import org.jetbrains.compose.resources.painterResource
 import zhihu.shared.generated.resources.Res
 import zhihu.shared.generated.resources.ic_vote_down_24dp
@@ -202,7 +204,7 @@ fun ArticleScreen(
     val settings = rememberSettingsStore()
     val isTitleAutoHide by rememberObservedSetting(settings, "titleAutoHide") { getBoolean("titleAutoHide", false) }
     val autoHideArticleBottomBar by rememberObservedSetting(settings, "autoHideArticleBottomBar") {
-        getBoolean("autoHideArticleBottomBar", false)
+        getBoolean("autoHideArticleBottomBar", true)
     }
     val configuredAnswerSwitchMode by rememberObservedSetting(settings, "answerSwitchMode") {
         getString("answerSwitchMode", "vertical")
@@ -215,7 +217,7 @@ fun ArticleScreen(
     val useDuo3ArticleActions by rememberObservedSetting(settings, "duo3_article_actions") {
         getBoolean("duo3_article_actions", false)
     }
-    val buttonSkipAnswer by rememberObservedSetting(settings, "buttonSkipAnswer") { getBoolean("buttonSkipAnswer", true) }
+    val buttonSkipAnswer by rememberObservedSetting(settings, "buttonSkipAnswer") { getBoolean("buttonSkipAnswer", false) }
     val autoHideSkipAnswerButton by rememberObservedSetting(settings, "autoHideSkipAnswerButton") {
         getBoolean("autoHideSkipAnswerButton", true)
     }
@@ -870,7 +872,10 @@ fun ArticleScreen(
                                         } else {
                                             1f
                                         }
-                                    },
+                                    }
+                                    // 本 fork：操作栏加底色，避免正文从按钮后面和系统导航栏下面透出来
+                                    .background(MaterialTheme.colorScheme.surface)
+                                    .padding(top = 8.dp),
                             ) {
                                 ActionBarContent()
                             }
@@ -1123,6 +1128,14 @@ fun ArticleScreen(
     }
 
     val nav = answerNavigationState.answerNavigator
+    // 本 fork 默认关了「下一个回答」按钮，第一次读到回答底部时提示一次上拉切换
+    val hasNextAnswer = nav?.nextAnswer != null
+    LaunchedEffect(usesVerticalAnswerSwitch, hasNextAnswer) {
+        if (!usesVerticalAnswerSwitch || !hasNextAnswer || settings.getBoolean("answerSwitchHintShown", false)) return@LaunchedEffect
+        snapshotFlow { scrollState.value > 0 && scrollState.value >= latestEffectiveScrollMaxValue }.first { it }
+        settings.putBoolean("answerSwitchHintShown", true)
+        userMessages.showMessage("到底后继续上拉，可切换到下一个回答", UserMessageDuration.Long)
+    }
     val progressBarTopPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 64.dp
     val progressBarBottomPadding = WindowInsets.systemBars.asPaddingValues().calculateBottomPadding() + 96.dp
 

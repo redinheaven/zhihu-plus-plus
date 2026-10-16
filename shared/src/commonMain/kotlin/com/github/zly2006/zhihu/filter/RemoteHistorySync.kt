@@ -155,7 +155,10 @@ class RemoteHistorySync(
             scanned += items.size
             imported += unseen.size
             unsupported += items.size - events.size
-            if (unseen.isNotEmpty()) revision.value++
+            if (unseen.isNotEmpty()) {
+                revision.value++
+                ContentOpenEventSupport.noteOpened(unseen)
+            }
             recentPage.complete(Unit)
 
             // The API is newest-read-first. Cross the previous successful time boundary, including

@@ -327,7 +327,7 @@ fun SystemAndUpdateSettingsScreen(
                     )
                 }
 
-                var allowTelemetry by remember { mutableStateOf(settings.getBoolean("allowTelemetry", true)) }
+                var allowTelemetry by remember { mutableStateOf(settings.getBoolean("allowTelemetry", false)) }
                 SettingItemWithSwitch(
                     title = { Text("允许发送遥测统计数据") },
                     description = { Text("仅用于统计使用人数，不包含个人隐私") },
@@ -359,6 +359,19 @@ fun SystemAndUpdateSettingsScreen(
                     settingKey = AIGC_MARKING_ENABLED_PREFERENCE_KEY,
                     highlightedKey = highlightedSetting,
                 )
+            }
+
+            if (isCloudFileSyncSupported) {
+                SettingItemGroup(
+                    title = "数据同步",
+                    footer = {
+                        Text(
+                            "完整备份到所选文件（不含离线缓存），同步和恢复都是合并。文件含登录凭据，请妥善保管。",
+                        )
+                    },
+                ) {
+                    CloudFileSyncSettings()
+                }
             }
 
             var reminderExpanded by remember { mutableStateOf(false) }

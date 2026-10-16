@@ -129,7 +129,7 @@ fun HotListScreen(
                 )
             }
 
-            val showRefreshFab = remember { settings.getBoolean("showRefreshFab", true) }
+            val showRefreshFab = remember { settings.getBoolean("showRefreshFab", false) }
             if (showRefreshFab) {
                 DraggableRefreshButton(
                     modifier = Modifier.testTag(HOT_LIST_REFRESH_BUTTON_TAG),

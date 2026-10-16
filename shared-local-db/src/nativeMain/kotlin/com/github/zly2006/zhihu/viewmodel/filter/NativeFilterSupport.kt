@@ -49,6 +49,18 @@ internal val emptyContentFilterDatabase = object : ContentFilterDatabase() {
     override fun blockedTopicDao(): BlockedTopicDao = emptyBlockedTopicDao
 
     override fun blockedFeedRecordDao(): BlockedFeedRecordDao = emptyBlockedFeedRecordDao
+
+    override fun offlineContentDao(): OfflineContentDao = emptyOfflineContentDao
+}
+
+private val emptyOfflineContentDao = object : OfflineContentDao {
+    override suspend fun upsert(content: OfflineContent) = Unit
+
+    override suspend fun get(key: String): OfflineContent? = null
+
+    override suspend fun recentReadable(limit: Int): List<OfflineContent> = emptyList()
+
+    override suspend fun prune(before: Long, keep: Int) = Unit
 }
 
 private val emptyContentFilterDao = object : ContentFilterDao {
@@ -75,6 +87,8 @@ private val emptyContentOpenEventDao = object : ContentOpenEventDao {
     override suspend fun getOpenedContentKeys(type: String, ids: List<String>): List<String> = emptyList()
 
     override suspend fun getRemotelySyncedContentKeys(type: String, ids: List<String>): List<String> = emptyList()
+
+    override suspend fun getLastOpenedTimes(): List<ContentLastOpened> = emptyList()
 }
 
 private val emptyBlockedKeywordDao = object : BlockedKeywordDao {

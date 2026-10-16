@@ -35,6 +35,7 @@ class MixedHomeFeedViewModel :
     val web = HomeFeedViewModel()
     override val initialUrl: String
         get() = "https://api.zhihu.com/topstory/recommend"
+    override val pagesPerRefresh = 2
 
     init {
         android.displayItems = this.displayItems

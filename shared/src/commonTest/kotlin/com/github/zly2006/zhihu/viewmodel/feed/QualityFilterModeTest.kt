@@ -23,7 +23,13 @@ import com.github.zly2006.zhihu.data.Person
 import com.github.zly2006.zhihu.data.QualityFilterSettings
 import com.github.zly2006.zhihu.viewmodel.FeedDisplayEnvironment
 import com.github.zly2006.zhihu.viewmodel.FeedDisplaySettings
+import com.github.zly2006.zhihu.viewmodel.PaginationEnvironment
 import com.github.zly2006.zhihu.viewmodel.QualityFilterMode
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.mock.MockEngine
+import io.ktor.client.engine.mock.respond
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -92,5 +98,42 @@ class QualityFilterModeTest {
 
         assertTrue(item.isQualityFiltered)
         assertTrue(item.summary.orEmpty().contains("1000"))
+    }
+
+    /** 「隐藏」模式要在首页以外的信息流（关注、热榜、搜索等共用的 BaseFeedViewModel）里也去掉占位卡 */
+    @Test
+    fun hideModeDropsQualityFilteredCardsOutsideHomeFeed() {
+        listOf(QualityFilterMode.RULES to 1, QualityFilterMode.HIDE to 0).forEach { (mode, expected) ->
+            val viewModel = TestFeedViewModel()
+            viewModel.process(paginationEnvironment(mode), listOf(lowQualityArticle))
+            assertEquals(expected, viewModel.displayItems.size, "mode=$mode")
+        }
+    }
+
+    private class TestFeedViewModel : BaseFeedViewModel() {
+        override val initialUrl = ""
+
+        fun process(
+            environment: PaginationEnvironment,
+            feeds: List<Feed>,
+        ) = processResponse(environment, feeds, JsonArray(emptyList()))
+    }
+
+    private fun paginationEnvironment(mode: QualityFilterMode) = object : PaginationEnvironment {
+        override fun httpClient() = HttpClient(MockEngine { respond("{}") })
+
+        override fun authenticatedCookies() = emptyMap<String, String>()
+
+        override suspend fun fetchJson(
+            url: String,
+            include: String,
+        ): JsonObject? = null
+
+        override suspend fun handleFetchFailure(
+            tag: String?,
+            error: Exception,
+        ) = Unit
+
+        override fun feedDisplaySettings() = FeedDisplaySettings(qualityFilterMode = mode)
     }
 }
