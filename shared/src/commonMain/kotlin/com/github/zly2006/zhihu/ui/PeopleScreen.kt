@@ -1584,7 +1584,7 @@ private fun OfficialBadgeDetails(
 
 private val OfficialBadge.peopleDetailTitle: String
     get() = when {
-        title == "认证" || title == "已认证的个人" -> "认证信息"
+        isIdentityCertification -> "认证信息"
         else -> title
     }
 

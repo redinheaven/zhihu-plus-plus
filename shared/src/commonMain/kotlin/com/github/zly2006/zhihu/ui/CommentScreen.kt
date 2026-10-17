@@ -1291,7 +1291,7 @@ private fun CommentItem(
                     Text(
                         text = commentData.author.name,
                         fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp,
+                        fontSize = 14.sp,
                         modifier = Modifier
                             .testTag("comment_author_${commentData.id}")
                             .clickable { navigator.onNavigate(authorPerson) },
@@ -1320,7 +1320,7 @@ private fun CommentItem(
                         Text(
                             text = replyToAuthor.name,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp,
+                            fontSize = 14.sp,
                             modifier = Modifier
                                 .testTag("comment_reply_to_author_${commentData.id}")
                                 .clickable {
@@ -1372,8 +1372,9 @@ private fun CommentItem(
                     ) {
                         Text(
                             text = string,
-                            fontSize = 16.sp * fontSizePercent / 100,
-                            lineHeight = 16.sp * fontSizePercent / 100 * lineHeightPercent / 100,
+                            // 与首页卡片摘要同为 14sp（同样跟随阅读字号设置）
+                            fontSize = 14.sp * fontSizePercent / 100,
+                            lineHeight = 14.sp * fontSizePercent / 100 * lineHeightPercent / 100,
                             inlineContent = inlineContent,
                         )
                     }

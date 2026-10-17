@@ -147,35 +147,11 @@ class AnswerEndorsementTest {
             ),
         )
 
+        // 本 fork 不显示任何回答徽章；解析本身仍由 AnswerEndorsement.display 完成
+        assertEquals(emptyList(), answer.endorsementItems)
         assertEquals(
-            listOf(
-                "话题收录 我的开源名片",
-                "创作声明: 内容包含剧透",
-                "收录于话题: 科技",
-            ),
-            answer.endorsementTexts,
-        )
-        assertEquals(
-            listOf(
-                DataHolder.AnswerEndorsementDisplay(
-                    text = "话题收录 我的开源名片",
-                    backgroundColor = DataHolder.AnswerEndorsementColor(alpha = 0.1f, group = "GYL02A"),
-                    textColor = DataHolder.AnswerEndorsementColor(alpha = 1f, group = "GYL02A"),
-                    leadingIconKey = "zhicon_icon_24_chat_bubble_hash_fill",
-                    leadingIconColor = DataHolder.AnswerEndorsementColor(alpha = 1f, group = "GYL02A"),
-                    trailingIconKey = "zhicon_icon_16_arrow_right",
-                ),
-                DataHolder.AnswerEndorsementDisplay(
-                    text = "创作声明: 内容包含剧透",
-                    backgroundColor = DataHolder.AnswerEndorsementColor(alpha = 0.1f, group = "GBL01A"),
-                    textColor = DataHolder.AnswerEndorsementColor(alpha = 1f, group = "GBL07A"),
-                    trailingIconKey = "zhicon_icon_16_arrow_down",
-                ),
-                DataHolder.AnswerEndorsementDisplay(
-                    text = "收录于话题: 科技",
-                ),
-            ),
-            answer.endorsementItems,
+            listOf("话题收录 我的开源名片", "创作声明: 内容包含剧透", "收录于话题: 科技"),
+            answer.endorsements.orEmpty().mapNotNull { it.display?.text },
         )
     }
 }

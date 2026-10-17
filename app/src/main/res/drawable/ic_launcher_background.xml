@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 知乎++ Jev 图标背景 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- 青墨绿竖向渐变 -->
+    <path android:pathData="M0,0h108v108h-108z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="0" android:startY="0"
+                android:endX="0" android:endY="108">
+                <item android:offset="0" android:color="#FF2F675F" />
+                <item android:offset="0.5" android:color="#FF2A5C55" />
+                <item android:offset="1" android:color="#FF214B45" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- 玻璃反光：顶部一块下沿微弧的白色高光，透明度 46% 渐弱到 12% -->
+    <path android:pathData="M0,0H108V44C72,54 36,54 0,44Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="0" android:startY="0"
+                android:endX="0" android:endY="51.5">
+                <item android:offset="0" android:color="#75FFFFFF" />
+                <item android:offset="1" android:color="#1FFFFFFF" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <!-- 底部反射光：72dp 以下由透明渐变到 14% 白，配合顶部高光形成玻璃质感 -->
+    <path android:pathData="M0,72H108V108H0Z">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="0" android:startY="72"
+                android:endX="0" android:endY="108">
+                <item android:offset="0" android:color="#00FFFFFF" />
+                <item android:offset="1" android:color="#24FFFFFF" />
+            </gradient>
+        </aapt:attr>
+    </path>
+</vector>

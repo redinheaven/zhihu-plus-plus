@@ -22,6 +22,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.github.zly2006.zhihu.data.Feed
 import com.github.zly2006.zhihu.data.FeedDisplayItem
+import com.github.zly2006.zhihu.data.hasIdentityCertification
 import com.github.zly2006.zhihu.data.navDestination
 import com.github.zly2006.zhihu.data.target
 import com.github.zly2006.zhihu.navigation.Article
@@ -103,13 +104,9 @@ open class QuestionFeedViewModel(
 
     override fun processResponse(environment: PaginationEnvironment, data: List<Feed>, rawData: kotlinx.serialization.json.JsonArray) {
         val blockedUserIds = environment.blockedUserIds()
-        val filtered = if (blockedUserIds.isEmpty()) {
-            data
-        } else {
-            data.filterNot { feed ->
-                val target = feed.target
-                target is Feed.AnswerTarget && target.author?.id in blockedUserIds
-            }
+        val filtered = data.filterNot { feed ->
+            val author = (feed.target as? Feed.AnswerTarget)?.author
+            author != null && (author.id in blockedUserIds || author.badgeV2.hasIdentityCertification() && !author.isFollowing)
         }
         super.processResponse(environment, filtered, rawData)
     }

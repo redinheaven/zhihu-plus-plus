@@ -321,10 +321,9 @@ object DataHolder {
         val endorsementTexts: List<String>
             get() = endorsementItems.map { item -> item.text }
 
+        /** 本 fork 不显示任何回答徽章（收录、谢邀、创作声明等）；回答页和切换回答的预加载都从这里取 */
         val endorsementItems: List<AnswerEndorsementDisplay>
-            get() = endorsements
-                .orEmpty()
-                .mapNotNull { endorsement -> endorsement.display }
+            get() = emptyList()
 
         @Serializable
         data class PaginationInfo(

@@ -21,6 +21,7 @@ import com.fleeksoft.ksoup.Ksoup
 import com.github.zly2006.zhihu.data.AdvertisementFeed
 import com.github.zly2006.zhihu.data.DataHolder
 import com.github.zly2006.zhihu.data.FeedDisplayItem
+import com.github.zly2006.zhihu.data.hasIdentityCertification
 import com.github.zly2006.zhihu.data.navDestination
 import com.github.zly2006.zhihu.data.questionAuthor
 import com.github.zly2006.zhihu.data.questionId
@@ -128,6 +129,8 @@ class FeedContentFilterPipeline(
                         blocked.add(content to "屏蔽作者：${content.authorName ?: content.authorId}")
                     content.questionAuthorId in blockedQuestionAuthorIds ->
                         blocked.add(content to "屏蔽提问者：${content.questionAuthorName ?: content.questionAuthorId}")
+                    content.authorCertified && !content.isFollowing ->
+                        blocked.add(content to "屏蔽认证用户：${content.authorName ?: content.authorId}")
                     else -> kept.add(content)
                 }
             }
@@ -397,6 +400,7 @@ data class FilterableContent(
     val navDestinationJson: String? = null,
     val questionAuthorName: String? = null,
     val questionAuthorId: String? = null,
+    val authorCertified: Boolean = false,
 )
 
 data class FeedContentIdentity(
@@ -431,6 +435,12 @@ fun FeedDisplayItem.toFilterableContent(
     contentType = identity.type,
     raw = rawContent,
     isFollowing = rawContent.author?.isFollowing ?: false,
+    authorCertified = feed
+        ?.target
+        ?.author
+        ?.badgeV2
+        .hasIdentityCertification() ||
+        rawContent.author?.badgeV2.hasIdentityCertification(),
     questionId = when (rawContent) {
         is DataHolder.Answer -> rawContent.question.id
         is DataHolder.Question -> rawContent.id

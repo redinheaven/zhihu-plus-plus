@@ -110,7 +110,10 @@ sealed interface Feed {
         val isLabeled: Boolean = false,
         val visitedCount: Int = 0,
         val thumbnails: List<String> = emptyList(),
-        val favoriteCount: Int = 0,
+        /** 收藏数：首页网页推荐叫 favorite_count，关注推荐和问题回答列表叫 favlists_count，关注动态不返回（为 null） */
+        @OptIn(ExperimentalSerializationApi::class)
+        @JsonNames("favlistsCount")
+        val favoriteCount: Int? = null,
         val answerType: String? = null,
         val segmentInfos: List<SegmentInfoParagraph> = emptyList(),
         @Serializable(with = BooleanCompatSerializer::class)
@@ -124,7 +127,7 @@ sealed interface Feed {
             null
         }
 
-        override val detailsText = "回答 · $voteupCount 赞同 · $commentCount 评论"
+        override val detailsText = "回答 · $voteupCount 赞同 · $commentCount 评论" + favoriteCount?.let { " · $it 收藏" }.orEmpty()
         override val title: String
             get() = question.title
     }

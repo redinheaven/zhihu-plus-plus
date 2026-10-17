@@ -26,6 +26,7 @@ import com.github.zly2006.zhihu.data.DataHolder
 import com.github.zly2006.zhihu.data.Feed
 import com.github.zly2006.zhihu.data.FeedDisplayItem
 import com.github.zly2006.zhihu.data.ZhihuJson
+import com.github.zly2006.zhihu.data.hasIdentityCertification
 import com.github.zly2006.zhihu.data.target
 import com.github.zly2006.zhihu.util.raiseForStatus
 import com.github.zly2006.zhihu.viewmodel.PaginationEnvironment
@@ -202,7 +203,10 @@ open class SearchViewModel(
         val blockedUserIds = environment.blockedUserIds()
         super.processResponse(
             environment,
-            data.filterNot { it.target?.author?.id in blockedUserIds },
+            data.filterNot { feed ->
+                val author = feed.target?.author
+                author != null && (author.id in blockedUserIds || author.badgeV2.hasIdentityCertification() && !author.isFollowing)
+            },
             rawData,
         )
         if (searchTab != SearchTab.General) return

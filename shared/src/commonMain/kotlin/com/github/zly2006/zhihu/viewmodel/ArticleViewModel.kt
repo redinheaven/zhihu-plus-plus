@@ -240,8 +240,7 @@ class ArticleViewModel(
                             updatedAt = answer.updatedTime
                             createdAt = answer.createdTime
                             ipInfo = answer.ipInfo
-                            // 本 fork 不显示知乎的「收录到 XXX」标记
-                            endorsements = answer.endorsementItems.filterNot { "收录" in it.text }
+                            endorsements = answer.endorsementItems
                             topics = emptyList()
 
                             environment.postHistoryDestination(

@@ -34,7 +34,14 @@ data class OfficialBadge(
 
     val isUsefulInList: Boolean
         get() = !isGenericCertification
+
+    /** 作者页显示为「认证信息」的个人认证（如「认证信息: XX 公司工程师」） */
+    val isIdentityCertification: Boolean
+        get() = title == "认证" || title == "已认证的个人"
 }
+
+/** 本 fork 屏蔽带「认证信息」的作者：首页、问题回答列表和搜索结果都不显示其内容（关注的人除外） */
+fun DataHolder.BadgeV2?.hasIdentityCertification(): Boolean = officialBadgeDetails().any { it.isIdentityCertification }
 
 fun DataHolder.BadgeV2?.officialBadge(): OfficialBadge? {
     this ?: return null
