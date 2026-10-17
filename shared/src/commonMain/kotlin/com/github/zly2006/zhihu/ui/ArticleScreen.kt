@@ -37,6 +37,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -96,6 +98,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -148,8 +151,8 @@ import com.github.zly2006.zhihu.ui.components.VotersSheet
 import com.github.zly2006.zhihu.ui.components.ZhihuTwoRowsTopAppBar
 import com.github.zly2006.zhihu.ui.components.normalizedAnswerSwitchSensitivity
 import com.github.zly2006.zhihu.ui.components.pageTurnViewportWithGuide
+import com.github.zly2006.zhihu.ui.components.rememberContentLinkedScrollBehavior
 import com.github.zly2006.zhihu.ui.components.rememberPageTurnTarget
-import com.github.zly2006.zhihu.ui.components.rememberPreferCollapsedExitUntilCollapsedScrollBehavior
 import com.github.zly2006.zhihu.ui.subscreens.DEFAULT_PAGE_TURN_SWITCH_ANSWER
 import com.github.zly2006.zhihu.ui.subscreens.DUO3_TIQIAN_MARKDOWN_PREFERENCE_KEY
 import com.github.zly2006.zhihu.ui.subscreens.PREF_PAGE_TURN_SWITCH_ANSWER
@@ -168,7 +171,7 @@ import org.jetbrains.compose.resources.painterResource
 import zhihu.shared.generated.resources.Res
 import zhihu.shared.generated.resources.ic_vote_down_24dp
 import zhihu.shared.generated.resources.ic_vote_up_24dp
-import kotlin.math.max
+import kotlin.math.roundToInt
 
 private const val SCROLL_THRESHOLD = 10 // 滑动阈值，单位为dp
 private val ScrollThresholdDp = SCROLL_THRESHOLD.dp
@@ -425,16 +428,7 @@ fun ArticleScreen(
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     fun MainContent() {
-        val scrollBehavior = rememberPreferCollapsedExitUntilCollapsedScrollBehavior()
-        // 记录历史最大滚动范围，避免顶栏展开/收起时 maxValue 短暂变化导致 scrollBehavior 抖动。
-        var scrollStateMaxValue by remember { mutableIntStateOf(0) }
-        LaunchedEffect(scrollState) {
-            snapshotFlow { scrollState.maxValue }.collectLatest { maxValue ->
-                if (maxValue != Int.MAX_VALUE) {
-                    scrollStateMaxValue = max(maxValue, scrollStateMaxValue)
-                }
-            }
-        }
+        val scrollBehavior = rememberContentLinkedScrollBehavior(scrollState)
         Scaffold(
             modifier = Modifier
                 .fillMaxSize()
@@ -566,7 +560,7 @@ fun ArticleScreen(
                                     }
                                 }
                             },
-                            scrollBehavior = if (scrollStateMaxValue > 0) scrollBehavior else null,
+                            scrollBehavior = scrollBehavior,
                             colors = TopAppBarDefaults.topAppBarColors().copy(
                                 scrolledContainerColor = if (MaterialTheme.colorScheme.surfaceContainer != MaterialTheme.colorScheme.background) {
                                     MaterialTheme.colorScheme.surfaceContainer
@@ -885,14 +879,25 @@ fun ArticleScreen(
                 }
             },
         ) { innerPadding ->
+            // innerPadding 顶部随顶栏折叠变小；正文边距加回已折叠量（顶栏按取整后的 heightOffset 布局），固定为展开高度，
+            // 顶栏覆盖在正文上折叠，避免每帧重排整篇正文。
+            val layoutDirection = LocalLayoutDirection.current
+            val contentPadding = with(LocalDensity.current) {
+                val collapsedPx = if (isImmersiveMode) 0 else -scrollBehavior.state.heightOffset.roundToInt()
+                PaddingValues(
+                    start = innerPadding.calculateStartPadding(layoutDirection),
+                    top = (innerPadding.calculateTopPadding().roundToPx() + collapsedPx).toDp() + 8.dp,
+                    end = innerPadding.calculateEndPadding(layoutDirection),
+                    bottom = innerPadding.calculateBottomPadding(),
+                )
+            }
             CompositionLocalProvider(LocalBringIntoViewSpec provides articleBringIntoViewSpec) {
                 Box {
                     Column(
                         modifier = Modifier
                             .padding(horizontal = 16.dp)
                             .verticalScroll(scrollState)
-                            .padding(innerPadding)
-                            .padding(top = 8.dp),
+                            .padding(contentPadding),
                     ) {
                         if (isImmersiveMode && viewModel.authorName.isNotBlank()) {
                             Row(

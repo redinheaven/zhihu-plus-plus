@@ -612,7 +612,7 @@ fun AccountSettingScreen(
                     description = { Text("AGPL-3.0-only") },
                     icon = { Icon(painterResource(Res.drawable.ic_license_24dp), null) },
                     onClick = {
-                        openSystemUrl("https://github.com/zly2006/zhihu-plus-plus/blob/master/LICENSE")
+                        openSystemUrl("https://github.com/redinheaven/zhihu-plus-plus/blob/master/LICENSE")
                     },
                     endAction = {
                         Icon(

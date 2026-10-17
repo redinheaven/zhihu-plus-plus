@@ -55,6 +55,7 @@ Zhihu++ 是注重隐私、无广告的第三方知乎客户端，基于 Kotlin M
 ```bash
 # Android（单一版本，无 flavor）
 ./gradlew :app:assembleDebug         # 产物 app/build/outputs/apk/debug/app-debug.apk
+./gradlew :app:assembleRelease       # R8 压缩，产物 app/build/outputs/apk/release/app-release-unsigned.apk，签名见「魔改工作流」第 8 条
 ./gradlew :app:testDebugUnitTest
 
 # 桌面端
@@ -64,7 +65,7 @@ Zhihu++ 是注重隐私、无广告的第三方知乎客户端，基于 Kotlin M
 ./gradlew :app:ktlintFormat :shared:ktlintFormat
 ```
 
-Windows 上直接跑全量 `./gradlew ktlintFormat` 会在 `shared-local-db` 的 KSP 生成代码上报错（排除规则只认 `/` 分隔的路径），所以只格式化 `app` 和 `shared`；改了 `shared-local-db` 时再加 `:shared-local-db:ktlintCommonMainSourceSetFormat`。
+Windows 上直接跑全量 `./gradlew ktlintFormat` 会在 `shared-local-db` 的 KSP 生成代码上报错（排除规则只认 `/` 分隔的路径），所以只格式化 `app` 和 `shared`；改了 `shared-local-db` 时再加 `:shared-local-db:ktlintCommonMainSourceSetFormat :shared-local-db:ktlintNativeMainSourceSetFormat`。
 
 修改后的固定顺序：**构建通过 → `ktlintFormat` → review → 提交**。
 
@@ -130,13 +131,14 @@ Windows 上直接跑全量 `./gradlew ktlintFormat` 会在 `shared-local-db` 的
 5. **签名**：Release 签名读取环境变量 `signingKey` 等（见 `app/build.gradle.kts` 的 `signingConfigs`），不要把密钥写进仓库。
 6. **提交**：commit / PR 标题以 `feat:` / `fix:` / `refactor:` 开头，正文用中文。`feat` / `fix` 按相对基线的产品变化判定：新增用户可见行为是 `feat`，既有行为回归才是 `fix`。未经用户确认不要 commit 或 push。
 7. **构建产物**：本地生成的 Maven 仓库、jar、klib、APK 等不得提交。
-8. **自用安装包**：给用户手机用的 APK 复制到仓库根目录 `=release/`，命名 `zhihu++jev-v<版本>.apk`（`*.apk` 已被 git 忽略）。从 v1.3 起是 release 构建（R8 压缩，约 6 MB，比 debug 包流畅）：`./gradlew :app:assembleRelease` 得到未签名包，再用 `build-tools/36.0.0` 的 `zipalign -p 4` 和 `apksigner sign --ks C:\Users\Administrator\.android\debug.keystore --ks-key-alias androiddebugkey`（密码 `android`）签名；`apksigner.bat` 会把路径里的 `=` 当分隔符，先输出到别处再复制进 `=release/`。release 包不可调试，`run-as` 读不了数据库，要查数据时临时装 debug 包。v1.0、v1.2 是 debug 构建，同样用这个 keystore 签名，APK 内显示的版本号仍是上游的 `app.versionName`（未改，避免合并冲突）。这个 keystore 要妥善保留：换签名后不能覆盖安装。APK 内含 Jev API Key，不要分发。
+8. **自用安装包**：给用户手机用的 APK 复制到仓库根目录 `=release/`，命名 `zhihu++jev-v<版本>.apk`（`*.apk` 已被 git 忽略）。从 v1.3 起是 release 构建（R8 压缩，约 6 MB，比 debug 包流畅）：`./gradlew :app:assembleRelease` 得到未签名包，再用 `build-tools/36.0.0` 的 `zipalign -p 4` 和 `apksigner sign --ks C:\Users\Administrator\.android\debug.keystore --ks-key-alias androiddebugkey`（密码 `android`）签名；`apksigner.bat` 会把路径里的 `=` 当分隔符，先输出到别处再复制进 `=release/`。release 包不可调试，`run-as` 读不了数据库，要查数据时临时装 debug 包。v1.0、v1.2 是 debug 构建，同样用这个 keystore 签名，版本号显示为「上游 `app.versionName` + 本 fork 后缀」，后缀在 `app/build.gradle.kts` 的 `versionNameSuffix`（如 `-jev1.4`，显示 `0.31-jev1.4`），发新版时改这里；`gradle.properties` 不动，避免合并冲突。这个 keystore 要妥善保留：换签名后不能覆盖安装。APK 内含 Jev API Key，不要分发。
 
    | 版本 | 日期 | 内容 |
    | --- | --- | --- |
    | v1.0 | 2026-10-16 | Jev 版 + 离线阅读、刷新两页、已读标记、屏蔽入口改版（不含云端备份） |
    | v1.2 | 2026-10-16 | v1.0 + 系统云端备份 + 设置页「数据同步」（完整数据合并写入用户选的文件、立刻同步、从文件恢复） |
    | v1.3 | 2026-10-17 | 改为 release 构建；性能（已读标记一次读入内存、卡片标题摘要解析缓存）；推荐页广告卡过滤、离线预下载作者头像、首次读到回答底部提示上拉切换、同步失败在设置入口标红、下拉刷新第一页到了就收起刷新圈；质量屏蔽默认隐藏；界面精简（去段评划线、去创作按钮、话题菜单折叠等，见魔改记录）；精简：删除系统云端备份（改为数据同步每日自动同步）、列表自带正文保存、打开回答时的上次阅读提示；Jev 关键词建议改为点击触发；遥测默认关闭 |
+   | v1.4 | 2026-10-17 | 版本号显示 `0.31-jev1.4`；文章页顶栏随正文同步折叠、去掉松手吸附，折叠时不再每帧重排正文；首页 Web 端推荐每页按发布时间从新到旧（可关）；去掉上游交流群入口，许可证 / issue / 导出页脚链接改指向本 fork |
 
 ## 上游规则的取舍
 
@@ -162,12 +164,15 @@ Windows 上直接跑全量 `./gradlew ktlintFormat` 会在 `shared-local-db` 的
   ```
   启动时弹出 `netsimd.exe has stopped working` 可以忽略，不影响模拟器。
 - **adb 端口**：默认的 5037 被用户自己的 Python 服务占用，5039 也被占过，50000～57870 一带是 Windows 保留端口。adb 一律用 `-P 15037`；`adb start-server` 守护模式在 agent 会话里会卡死，要以后台任务运行 `adb -P 15037 nodaemon server`，会话结束后需重新启动。
+- 模拟器启动后注册到默认 5037 端口的 adb，在 15037 的 adb 里看不到 `emulator-5554`；要先 `adb -P 15037 connect 127.0.0.1:5555`，之后设备序列号是 `127.0.0.1:5555`。
+- 本机内存吃紧时（模拟器约 3 GB，加上 Gradle 构建），Claude Code 可能在会话空闲时把后台的模拟器和 adb server 杀掉；再用时重新启动即可。
 - 用 SDK 自带的 `platform-tools\adb.exe`；PATH 里另有一个旧版 r34 adb（`D:\=Playground\...`），不要混用。
 - Git Bash 里调用 adb 前先 `export MSYS_NO_PATHCONV=1`，否则 `/sdcard/...` 会被改写成 Windows 路径。
 
 ```bash
 export MSYS_NO_PATHCONV=1
-ADB="$LOCALAPPDATA/Android/Sdk/platform-tools/adb.exe -P 15037 -s emulator-5554"
+"$LOCALAPPDATA/Android/Sdk/platform-tools/adb.exe" -P 15037 connect 127.0.0.1:5555
+ADB="$LOCALAPPDATA/Android/Sdk/platform-tools/adb.exe -P 15037 -s 127.0.0.1:5555"
 ./gradlew :app:assembleDebug
 $ADB install -r app/build/outputs/apk/debug/app-debug.apk
 $ADB shell am force-stop com.github.zly2006.zhplus.jev
@@ -178,7 +183,7 @@ $ADB shell svc wifi disable; $ADB shell svc data disable   # 模拟断网，测�
 
 - 首次启动有两页声明，「确认」按钮中心在 y≈2243（1080x2400），底边与导航栏重叠，点边缘会点不中；尽量先 `uiautomator dump` 再按 bounds 点击。
 - 模拟器默认上网走 Wi-Fi（`wlan0`，不计流量）；关掉 Wi-Fi 后走模拟移动数据（计流量）。
-- 数据库在 `databases/content_filter_database`（含 `-wal`），可用 `run-as com.github.zly2006.zhplus.jev cat` 拉回电脑用 sqlite 查看。
+- 数据库在 `databases/content_filter_database`（含 `-wal`），可用 `run-as com.github.zly2006.zhplus.jev cat` 拉回电脑用 sqlite 查看（只对 debug 包有效，release 包不可调试）。
 - **登录**：知乎会识别模拟器，在模拟器里登录常提示「网络环境存在异常」。`zhihu_api30` 里已有登录态，能用就别清数据；失效时按 `.agents/skills/launch-on-device/SKILL.md` 恢复 `files/account.json`，或用浏览器的 Cookie 构造登录文件导入。
 - `.agents/skills/` 下的上游技能（`ui-test`、`launch-on-device` 等）仍写着旧的 lite 包名 `com.github.zly2006.zhplus.lite` 和 `assembleLiteDebug`，使用时替换成上面的包名和命令；`llm_test_helper.py` 直接调用 PATH 里的 `adb`，用前要调整 PATH 和 adb 端口。
 
@@ -202,6 +207,9 @@ $ADB shell svc wifi disable; $ADB shell svc data disable   # 模拟断网，测�
 - 已读标记：`FeedCard` 用 `content_open_events`（本地打开 + 同步的知乎浏览历史）在详情行前显示「3 天前读过」。
 - 屏蔽入口：账号页新增「屏蔽列表」直达入口；首页卡片「按关键词屏蔽」弹窗支持手动输入，可选「普通屏蔽词」（带匹配范围，每个词一条规则）或「AI 主题（Jev）」，点「Jev 建议」才请求 Jev 提取关键词，结果只作为可点选的建议（默认不选），弹窗底部可跳到屏蔽列表；屏蔽列表的 NLP 标签页改名「AI 屏蔽主题」。
 - 数据同步：`shared/src/androidMain/.../ui/subscreens/AndroidSubscreenRuntimes.kt` 的 `CloudFileSyncSettings`（设置 → 系统与更新）。用 SAF 选一个文件，写入两个 SharedPreferences、`account.json`、`history.json` 和两个 Room 数据库的全部表（排除离线正文和本地推荐的爬虫缓存三表）；同步 = 本机与文件合并后写回文件（冲突以本机为准），恢复 = 文件合并进本机（冲突以文件为准）后重启应用。`MainActivity` 启动时距上次成功同步超过一天会自动同步（`syncCloudFileIfDue`）。系统自动备份配置保持上游原样，曾经的 `ConfigBackupAgent` 已删除。
+- 版本号加后缀 `-jev<版本>`（当前 `-jev1.4`）；去掉设置页「交流 & 闲聊」（上游 Discord / Telegram / issue）；许可证链接、实验性 UI 页脚的 issue 链接、文章导出页脚的 GitHub 地址改指向本 fork（导出署名改为「知乎++ Jev」）。
+- 文章页顶栏：`TwoRowsTopAppBar.kt` 的 `rememberContentLinkedScrollBehavior` 让折叠量等于正文滚动距离（不先消费滚动、不吸附），`ArticleScreen` 正文顶部边距固定为展开高度，顶栏覆盖在正文上折叠；原 `PreferCollapsedExitUntilCollapsedScrollBehavior` 与吸附代码已删除。很短的回答可能收不完顶栏。
+- 首页排序：设置「推荐系统与内容过滤 → 按发布时间排序」（`homeFeedSortByPublishTime`，默认开），`HomeFeedViewModel.processResponse` 把每页按 `target.created_time` 从新到旧重排（外层 `created_time` 是请求时刻，不能用）。安卓端推荐卡片实测不带任何时间字段，所以安卓端推荐不受影响、混合推荐只排网页端那部分。
 - 遥测 `allowTelemetry` 默认值改为 false（`Utils.kt` 与设置页两处）。
 - 界面精简：回答 / 文章不注入段评划线（`ArticleViewModel` 直接用原文，上游段评代码保留未调用）；回答页底部操作栏加 surface 底色；首页去掉创作「+」按钮（`SHOW_HOME_CREATE_FAB`）；Android 推荐卡片去掉「手机版推荐」来源标签；卡片菜单的话题改为可展开的「屏蔽话题（N）」（`BlockTopicMenuItems`，首页和关注页共用）；默认值改为：刷新浮动按钮关、「下一个回答」按钮关、回答页底栏自动隐藏开；账号页「关于」改为知乎++ Jev 和本 fork 地址。
 - 质量屏蔽：默认模式由「屏蔽规则」（留「已屏蔽」占位卡）改为「隐藏」；「隐藏」原先只在首页 `HomeFeedViewModel` 生效，现在 `BaseFeedViewModel.processResponse` 也会去掉占位，关注、热榜、搜索、问题回答列表等都不再留占位（`QualityFilterModeTest` 覆盖）。

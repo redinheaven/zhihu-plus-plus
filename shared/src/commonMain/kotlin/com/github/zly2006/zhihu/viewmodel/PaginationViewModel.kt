@@ -561,6 +561,8 @@ data class FeedDisplaySettings(
     val qualityFilterMode: QualityFilterMode = QualityFilterMode.RULES,
     val qualityFilter: QualityFilterSettings = QualityFilterSettings(),
     val reverseBlock: Boolean = false,
+    /** 首页 Web 端推荐每页按发布时间从新到旧重排；安卓端推荐卡片不带发布时间，不受影响。 */
+    val sortByPublishTime: Boolean = true,
 )
 
 enum class QualityFilterMode {
@@ -570,6 +572,7 @@ enum class QualityFilterMode {
 }
 
 const val QUALITY_FILTER_MODE_PREFERENCE_KEY = "qualityFilterMode"
+const val HOME_FEED_SORT_BY_PUBLISH_TIME_PREFERENCE_KEY = "homeFeedSortByPublishTime"
 const val ANSWER_VOTEUP_THRESHOLD_PREFERENCE_KEY = "answerVoteupThreshold"
 const val ARTICLE_VOTEUP_THRESHOLD_PREFERENCE_KEY = "articleVoteupThreshold"
 const val ARTICLE_FOLLOWERS_THRESHOLD_PREFERENCE_KEY = "articleFollowersThreshold"

@@ -40,7 +40,7 @@ import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 
 const val ARTICLE_EXPORT_TEMPLATE_ASSET = "article_export_template.html"
-const val ARTICLE_EXPORT_GITHUB_URL = "https://github.com/zly2006/zhihu-plus-plus"
+const val ARTICLE_EXPORT_GITHUB_URL = "https://github.com/redinheaven/zhihu-plus-plus"
 private const val ARTICLE_EXPORT_IMAGE_FETCH_CONCURRENCY = 6
 
 data class ArticleExportFooterData(

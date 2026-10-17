@@ -80,6 +80,7 @@ import com.github.zly2006.zhihu.util.Log
 import com.github.zly2006.zhihu.viewmodel.ANSWER_VOTEUP_THRESHOLD_PREFERENCE_KEY
 import com.github.zly2006.zhihu.viewmodel.ARTICLE_FOLLOWERS_THRESHOLD_PREFERENCE_KEY
 import com.github.zly2006.zhihu.viewmodel.ARTICLE_VOTEUP_THRESHOLD_PREFERENCE_KEY
+import com.github.zly2006.zhihu.viewmodel.HOME_FEED_SORT_BY_PUBLISH_TIME_PREFERENCE_KEY
 import com.github.zly2006.zhihu.viewmodel.QUALITY_FILTER_MODE_PREFERENCE_KEY
 import com.github.zly2006.zhihu.viewmodel.QUESTION_ANSWER_THRESHOLD_PREFERENCE_KEY
 import com.github.zly2006.zhihu.viewmodel.QUESTION_FOLLOWERS_THRESHOLD_PREFERENCE_KEY
@@ -209,6 +210,21 @@ fun ContentFilterSettingsScreen(
                             }
                         }
                     },
+                )
+
+                val sortByPublishTime = remember {
+                    mutableStateOf(settings.getBoolean(HOME_FEED_SORT_BY_PUBLISH_TIME_PREFERENCE_KEY, true))
+                }
+                SettingItemWithSwitch(
+                    title = { Text("按发布时间排序") },
+                    description = { Text("每次加载的一页内容按发布时间从新到旧排列。只有 Web 端推荐带发布时间：混合推荐中只对网页端那部分生效，安卓端推荐和本地推荐不受影响") },
+                    checked = sortByPublishTime.value,
+                    onCheckedChange = {
+                        sortByPublishTime.value = it
+                        settings.putBoolean(HOME_FEED_SORT_BY_PUBLISH_TIME_PREFERENCE_KEY, it)
+                    },
+                    settingKey = HOME_FEED_SORT_BY_PUBLISH_TIME_PREFERENCE_KEY,
+                    highlightedKey = highlightedSetting,
                 )
 
                 val isLoginForRecommendation = remember {

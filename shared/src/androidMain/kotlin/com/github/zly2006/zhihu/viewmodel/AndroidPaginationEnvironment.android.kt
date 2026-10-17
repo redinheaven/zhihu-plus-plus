@@ -251,6 +251,7 @@ open class SharedAndroidPaginationEnvironment(
             questionFollowersCount = settingsStore.getInt(QUESTION_FOLLOWERS_THRESHOLD_PREFERENCE_KEY, 50).coerceAtLeast(0),
         ),
         reverseBlock = settingsStore.getBoolean("reverseBlock", false),
+        sortByPublishTime = settingsStore.getBoolean(HOME_FEED_SORT_BY_PUBLISH_TIME_PREFERENCE_KEY, true),
     )
 
     override fun localHistory(): List<NavDestination> = HistoryStorage(context).history

@@ -180,9 +180,13 @@ class HomeFeedViewModel :
         debugData.addAll(rawData)
 
         viewModelScope.launch {
-            val loadedItems = data
-                .flattenFeeds()
-                .map { feed -> createDisplayItem(environment, feed) }
+            val feeds = data.flattenFeeds()
+            val loadedItems = if (environment.feedDisplaySettings().sortByPublishTime) {
+                // 外层 created_time 是请求时刻，target.created_time 才是发布时间；缺失的排到本页末尾
+                feeds.sortedByDescending { it.target?.createdTime ?: -1 }
+            } else {
+                feeds
+            }.map { feed -> createDisplayItem(environment, feed) }
             val newItems = if (environment.feedDisplaySettings().qualityFilterMode == QualityFilterMode.HIDE) {
                 loadedItems.filterNot { it.isQualityFiltered }
             } else {

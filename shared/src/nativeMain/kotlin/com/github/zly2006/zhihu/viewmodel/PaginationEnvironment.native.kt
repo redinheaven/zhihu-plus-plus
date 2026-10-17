@@ -122,6 +122,7 @@ internal class NativePaginationEnvironment(
     override fun feedDisplaySettings(): FeedDisplaySettings = FeedDisplaySettings(
         qualityFilterMode = QualityFilterMode.OFF,
         reverseBlock = settingsStore.toFeedFilterSettings().reverseBlock,
+        sortByPublishTime = settingsStore.getBoolean(HOME_FEED_SORT_BY_PUBLISH_TIME_PREFERENCE_KEY, true),
     )
 
     override fun localHistory(): List<NavDestination> = historyStorage.history

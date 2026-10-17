@@ -66,6 +66,7 @@ import com.github.zly2006.zhihu.ui.components.SettingItem
 import com.github.zly2006.zhihu.ui.components.SettingItemGroup
 import com.github.zly2006.zhihu.ui.components.pageTurnViewportWithGuide
 import com.github.zly2006.zhihu.ui.components.rememberPageTurnTarget
+import com.github.zly2006.zhihu.viewmodel.HOME_FEED_SORT_BY_PUBLISH_TIME_PREFERENCE_KEY
 import com.github.zly2006.zhihu.viewmodel.QUALITY_FILTER_MODE_PREFERENCE_KEY
 
 const val SETTINGS_SEARCH_INPUT_TAG = "settingsSearch.input"
@@ -232,6 +233,7 @@ private val settingsSearchEntries = buildList {
     add(recommendEntry("recommend.blockZhihuSchool", "屏蔽知乎学堂内容", "过滤知乎学堂和教育推广内容。", "blockZhihuSchool", listOf("学堂")))
     add(recommendEntry("recommend.blockWeChatOfficialAccount", "屏蔽微信公众号文章", "过滤微信公众号外链内容。", "blockWeChatOfficialAccount", listOf("微信")))
     add(recommendEntry("recommend.blockPaidContent", "屏蔽知乎盐选付费内容", "过滤会员付费内容。", "blockPaidContent", listOf("盐选", "付费")))
+    add(recommendEntry("recommend.sortByPublishTime", "按发布时间排序", "首页 Web 端推荐每页按发布时间从新到旧排列。", HOME_FEED_SORT_BY_PUBLISH_TIME_PREFERENCE_KEY, listOf("时间", "排序", "最新")))
     add(recommendEntry("recommend.reverseBlock", "反向屏蔽", "只保留广告和付费内容的调试模式。", "reverseBlock"))
     add(
         SettingsSearchEntry(

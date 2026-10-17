@@ -81,11 +81,6 @@ import com.github.zly2006.zhihu.ui.components.pageTurnViewportWithGuide
 import com.github.zly2006.zhihu.ui.components.rememberPageTurnTarget
 import com.github.zly2006.zhihu.util.ContinuousUsageReminderPolicy
 import kotlinx.coroutines.launch
-import org.jetbrains.compose.resources.painterResource
-import zhihu.shared.generated.resources.Res
-import zhihu.shared.generated.resources.ic_discord_24dp
-import zhihu.shared.generated.resources.ic_github_24dp
-import zhihu.shared.generated.resources.ic_telegram_24dp
 
 internal const val CONTINUOUS_USAGE_REMINDER_INTERVAL_MINUTES_KEY = "continuousUsageReminderIntervalMinutes"
 internal const val MACOS_QUIT_ON_WINDOW_CLOSE_PREFERENCE_KEY = "macosQuitOnWindowClose"
@@ -436,53 +431,6 @@ fun SystemAndUpdateSettingsScreen(
                             }
                         }
                     },
-                )
-            }
-
-            SettingItemGroup(
-                title = "交流 & 闲聊",
-                footer = { Text("代码和功能反馈请前往GitHub。上边的频道用于用户交流和闲聊，开发者不一定会在线回答问题。") },
-            ) {
-                SettingItem(
-                    title = { Text("Discord 频道") },
-                    description = { Text("请在 my-other-apps/zhihu-plus-plus 频道讨论") },
-                    icon = { Icon(painterResource(Res.drawable.ic_discord_24dp), null) },
-                    endAction = {
-                        Icon(
-                            Icons.Default.ArrowOutward,
-                            null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    },
-                    onClick = { openExternalUrl("https://discord.gg/YCPFZV5XSA") },
-                )
-
-                SettingItem(
-                    title = { Text("Telegram 群组 (Hydrogen)") },
-                    description = { Text("另一个知乎客户端 Hydrogen 的群组，也可以在里面讨论知乎++哦") },
-                    icon = { Icon(painterResource(Res.drawable.ic_telegram_24dp), null) },
-                    endAction = {
-                        Icon(
-                            Icons.Default.ArrowOutward,
-                            null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    },
-                    onClick = { openExternalUrl("https://t.me/+_A1Yto6EpyIyODA1") },
-                )
-
-                SettingItem(
-                    title = { Text("Github issue") },
-                    description = { Text("欢迎提交 issue 讨论功能和反馈问题") },
-                    icon = { Icon(painterResource(Res.drawable.ic_github_24dp), null) },
-                    endAction = {
-                        Icon(
-                            Icons.Default.ArrowOutward,
-                            null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    },
-                    onClick = { openExternalUrl("https://github.com/zly2006/zhihu-plus-plus/issues") },
                 )
             }
         }
