@@ -29,8 +29,8 @@ import com.github.zly2006.zhihu.data.applyPlatformDriver
 import kotlinx.coroutines.Dispatchers
 
 @Database(
-    entities = [ContentViewRecord::class, BlockedKeyword::class, BlockedUser::class, BlockedQuestionAuthor::class, BlockedContentRecord::class, BlockedTopic::class, BlockedFeedRecord::class, ContentOpenEvent::class, OfflineContent::class],
-    version = 9,
+    entities = [ContentViewRecord::class, BlockedKeyword::class, BlockedUser::class, BlockedQuestionAuthor::class, BlockedContentRecord::class, BlockedTopic::class, BlockedFeedRecord::class, ContentOpenEvent::class, OfflineContent::class, BlockedQuestion::class],
+    version = 10,
     exportSchema = false,
 )
 @ConstructedBy(ContentFilterDatabaseConstructor::class)
@@ -52,6 +52,8 @@ abstract class ContentFilterDatabase : RoomDatabase() {
     abstract fun blockedFeedRecordDao(): BlockedFeedRecordDao
 
     abstract fun offlineContentDao(): OfflineContentDao
+
+    abstract fun blockedQuestionDao(): BlockedQuestionDao
 }
 
 @Suppress("NO_ACTUAL_FOR_EXPECT")
@@ -197,10 +199,24 @@ private val migration8To9 = object : Migration(8, 9) {
     }
 }
 
+private val migration9To10 = object : Migration(9, 10) {
+    override fun migrate(connection: SQLiteConnection) {
+        connection.execSQL(
+            """
+            CREATE TABLE IF NOT EXISTS `${BlockedQuestion.TABLE_NAME}` (
+                `questionId` INTEGER NOT NULL PRIMARY KEY,
+                `title` TEXT NOT NULL,
+                `createdTime` INTEGER NOT NULL
+            )
+            """.trimIndent(),
+        )
+    }
+}
+
 fun buildContentFilterDatabase(
     builder: Builder<ContentFilterDatabase>,
 ): ContentFilterDatabase = builder
-    .addMigrations(migration2To3, migration3To4, migration4To5, migration5To6, migration6To7, migration7To8, migration8To9)
+    .addMigrations(migration2To3, migration3To4, migration4To5, migration5To6, migration6To7, migration7To8, migration8To9, migration9To10)
     .fallbackToDestructiveMigration(true)
     .applyPlatformDriver()
     .setQueryCoroutineContext(Dispatchers.Default)

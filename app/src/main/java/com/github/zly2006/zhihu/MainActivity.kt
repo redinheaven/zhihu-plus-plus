@@ -20,8 +20,11 @@ package com.github.zly2006.zhihu
 import android.annotation.SuppressLint
 import android.app.AlertDialog
 import android.content.ClipData
+import android.content.Context
 import android.content.Intent
 import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
@@ -51,6 +54,7 @@ import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.github.zly2006.zhihu.data.AccountData
 import com.github.zly2006.zhihu.data.HistoryStorage
+import com.github.zly2006.zhihu.data.networkReconnected
 import com.github.zly2006.zhihu.data.offlineImagePrefetcher
 import com.github.zly2006.zhihu.filter.ContentOpenEventSupport
 import com.github.zly2006.zhihu.navigation.Article
@@ -151,6 +155,7 @@ class MainActivity : ComponentActivity() {
         AndroidThemeSettings.initialize(this)
         androidKeywordSemanticMatcher = JevKeywordSemanticMatcher
         androidKeywordWeightExtractor = JevKeywordWeightExtractor
+        registerNetworkReconnectCallback()
         offlineImagePrefetcher = { urls ->
             // 离线阅读的图片预下载只在 Wi-Fi 等不按流量计费的网络下进行；只为写入磁盘缓存，不保留内存、按极小尺寸解码
             val appContext = applicationContext
@@ -547,4 +552,28 @@ class MainActivity : ComponentActivity() {
         const val ZSE93 = ZHIHU_WEB_ZSE93
         const val TAG = "MainActivity"
     }
+}
+
+private var networkReconnectCallbackRegistered = false
+
+/** 监听系统网络：从不可上网变为已验证可上网时发出 [networkReconnected]。进程内只注册一次，Activity 重建不重复注册。 */
+private fun Context.registerNetworkReconnectCallback() {
+    if (networkReconnectCallbackRegistered) return
+    networkReconnectCallbackRegistered = true
+    applicationContext.getSystemService(ConnectivityManager::class.java)?.registerDefaultNetworkCallback(
+        object : ConnectivityManager.NetworkCallback() {
+            // 注册时的首次回调不算「恢复」
+            private var validated = true
+
+            override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
+                val nowValidated = capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+                if (nowValidated && !validated) networkReconnected.tryEmit(Unit)
+                validated = nowValidated
+            }
+
+            override fun onLost(network: Network) {
+                validated = false
+            }
+        },
+    )
 }

@@ -24,6 +24,7 @@ import com.github.zly2006.zhihu.data.Feed
 import com.github.zly2006.zhihu.data.FeedDisplayItem
 import com.github.zly2006.zhihu.data.Person
 import com.github.zly2006.zhihu.data.ZhihuJson
+import com.github.zly2006.zhihu.data.isHostResolutionFailure
 import com.github.zly2006.zhihu.data.target
 import com.github.zly2006.zhihu.data.toFeedDisplayItemNavDestinationJson
 import com.github.zly2006.zhihu.navigation.Article
@@ -119,7 +120,7 @@ class AndroidHomeFeedViewModel :
             }
         } catch (e: Exception) {
             if (e !is CancellationException) {
-                environment.handleMobileHomeFeedFailure(e)
+                if (!e.isHostResolutionFailure()) environment.handleMobileHomeFeedFailure(e)
                 showOfflineItemsIfEmpty(environment)
             }
             throw e

@@ -28,6 +28,8 @@ import com.github.zly2006.zhihu.data.Feed
 import com.github.zly2006.zhihu.data.FeedDisplayItem
 import com.github.zly2006.zhihu.data.decodeArticleContentDetail
 import com.github.zly2006.zhihu.data.flattenFeeds
+import com.github.zly2006.zhihu.data.questionId
+import com.github.zly2006.zhihu.data.target
 import com.github.zly2006.zhihu.data.toDisplayItem
 import com.github.zly2006.zhihu.navigation.Article
 import com.github.zly2006.zhihu.navigation.ArticleType
@@ -39,6 +41,7 @@ import com.github.zly2006.zhihu.viewmodel.HomeFeedFilterResult
 import com.github.zly2006.zhihu.viewmodel.PaginationEnvironment
 import com.github.zly2006.zhihu.viewmodel.PaginationViewModel
 import com.github.zly2006.zhihu.viewmodel.QualityFilterMode
+import com.github.zly2006.zhihu.viewmodel.filter.BlockedQuestion
 import com.github.zly2006.zhihu.viewmodel.filter.BlockedTopic
 import com.github.zly2006.zhihu.viewmodel.filter.ContentDetailProvider
 import com.github.zly2006.zhihu.viewmodel.filter.getContentFilterDatabase
@@ -80,6 +83,7 @@ abstract class BaseFeedViewModel : PaginationViewModel<Feed>(typeOf<Feed>()) {
         displayItems.clear()
         if (isLoading) return
         errorMessage = null
+        networkUnavailable = false
         debugData.clear()
         allData.clear()
         lastPaging = null // 重置 lastPaging
@@ -195,6 +199,24 @@ abstract class BaseFeedViewModel : PaginationViewModel<Feed>(typeOf<Feed>()) {
         }
     }
 
+    fun handleBlockQuestion(
+        userMessages: UserMessageSink,
+        questionId: Long,
+        questionTitle: String,
+    ) {
+        viewModelScope.launch {
+            try {
+                getContentFilterDatabase()
+                    .blockedQuestionDao()
+                    .insertQuestion(BlockedQuestion(questionId = questionId, title = questionTitle))
+                displayItems.removeAll { it.blockableQuestion()?.first == questionId }
+                userMessages.showShortMessage("已屏蔽问题「$questionTitle」")
+            } catch (e: Exception) {
+                userMessages.showShortMessage("屏蔽失败: ${e.message}")
+            }
+        }
+    }
+
     fun handleBlockTopic(
         userMessages: UserMessageSink,
         topicId: String,
@@ -212,6 +234,13 @@ abstract class BaseFeedViewModel : PaginationViewModel<Feed>(typeOf<Feed>()) {
             }
         }
     }
+}
+
+/** 卡片所属的问题（回答取其所在问题）的 ID 和标题，供「屏蔽问题」使用；文章、想法等返回 null。 */
+fun FeedDisplayItem.blockableQuestion(): Pair<Long, String>? = when (val raw = raw) {
+    is DataHolder.Answer -> raw.question.id to raw.question.title
+    is DataHolder.Question -> raw.id to raw.title
+    else -> feed?.target?.questionId?.let { it to title }
 }
 
 /**

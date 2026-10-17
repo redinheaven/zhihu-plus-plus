@@ -37,6 +37,7 @@ import com.github.zly2006.zhihu.data.executeZhihuAuthenticatedRequest
 import com.github.zly2006.zhihu.data.fetchZhihuAuthenticatedJson
 import com.github.zly2006.zhihu.data.fetchZhihuContentDetail
 import com.github.zly2006.zhihu.data.getOrFetchContentDetail
+import com.github.zly2006.zhihu.data.isHostResolutionFailure
 import com.github.zly2006.zhihu.navigation.AnswerNavigator
 import com.github.zly2006.zhihu.navigation.Article
 import com.github.zly2006.zhihu.navigation.NavDestination
@@ -86,6 +87,13 @@ abstract class PaginationViewModel<T : Any>(
         protected set
     var errorMessage: String? = null
         protected set
+
+    /**
+     * 本 fork：断网（域名解析失败）后置为 true，列表滑到底不再自动加载下一页。
+     * 否则列表底部的自动加载会每 50ms 重试一次，不停弹出「Unable to resolve host」；刷新时重置。
+     */
+    var networkUnavailable = false
+        protected set
     var allowGuestAccess = false
     protected var lastPaging: ZhihuPaging? by mutableStateOf(null)
     open val isEnd: Boolean get() = lastPaging?.isEnd == true
@@ -111,6 +119,7 @@ abstract class PaginationViewModel<T : Any>(
         refreshChainJob?.cancel()
         isLoading = false
         errorMessage = null
+        networkUnavailable = false
         debugData.clear()
         allData.clear()
         lastPaging = null // 重置 lastPaging
@@ -177,7 +186,7 @@ abstract class PaginationViewModel<T : Any>(
         } catch (_: NoTransformationFoundException) {
             throw RuntimeException("您可能已被风控，请重新登录。")
         } catch (e: Exception) {
-            environment.handleFetchFailure(this::class.simpleName, e)
+            if (!e.isHostResolutionFailure()) environment.handleFetchFailure(this::class.simpleName, e)
             errorHandle(e)
         } finally {
             isLoading = false
@@ -186,7 +195,7 @@ abstract class PaginationViewModel<T : Any>(
 
     @OptIn(DelicateCoroutinesApi::class)
     open fun loadMore(environment: PaginationEnvironment) {
-        if (isLoading || isEnd) return // 使用新的isEnd getter
+        if (isLoading || isEnd || networkUnavailable) return // 使用新的isEnd getter
         isLoading = true
         currentJob = viewModelScope.launch {
             try {
@@ -199,7 +208,8 @@ abstract class PaginationViewModel<T : Any>(
 
     protected fun errorHandle(e: Exception) {
         if (e !is CancellationException) {
-            errorMessage = e.message
+            networkUnavailable = e.isHostResolutionFailure()
+            errorMessage = if (networkUnavailable) "网络不可用" else e.message
             isLoading = false
         }
     }

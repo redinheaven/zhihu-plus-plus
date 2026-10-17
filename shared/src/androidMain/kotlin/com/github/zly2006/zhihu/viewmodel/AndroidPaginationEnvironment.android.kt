@@ -369,6 +369,7 @@ open class SharedAndroidPaginationEnvironment(
                 blockedKeywordDao = filterDatabase.blockedKeywordDao(),
                 blockedUserDao = filterDatabase.blockedUserDao(),
                 blockedQuestionAuthorDao = filterDatabase.blockedQuestionAuthorDao(),
+                blockedQuestionDao = filterDatabase.blockedQuestionDao(),
                 blockedTopicDao = filterDatabase.blockedTopicDao(),
                 blockedKeywordService = BlockedKeywordService(
                     keywordDao = filterDatabase.blockedKeywordDao(),

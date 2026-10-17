@@ -259,6 +259,7 @@ class DesktopPaginationEnvironment(
                 blockedKeywordDao = contentFilterDb.blockedKeywordDao(),
                 blockedUserDao = contentFilterDb.blockedUserDao(),
                 blockedQuestionAuthorDao = contentFilterDb.blockedQuestionAuthorDao(),
+                blockedQuestionDao = contentFilterDb.blockedQuestionDao(),
                 blockedTopicDao = contentFilterDb.blockedTopicDao(),
                 blockedKeywordService = BlockedKeywordService(
                     keywordDao = contentFilterDb.blockedKeywordDao(),

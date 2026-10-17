@@ -222,6 +222,7 @@ internal class NativePaginationEnvironment(
                 blockedKeywordDao = contentFilterDatabase.blockedKeywordDao(),
                 blockedUserDao = contentFilterDatabase.blockedUserDao(),
                 blockedQuestionAuthorDao = contentFilterDatabase.blockedQuestionAuthorDao(),
+                blockedQuestionDao = contentFilterDatabase.blockedQuestionDao(),
                 blockedTopicDao = contentFilterDatabase.blockedTopicDao(),
                 blockedKeywordService = BlockedKeywordService(
                     keywordDao = contentFilterDatabase.blockedKeywordDao(),

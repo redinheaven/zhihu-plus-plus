@@ -965,40 +965,14 @@ fun ArticleScreen(
                                 ArticleType.Answer -> "回答"
                                 ArticleType.Article -> "文章"
                             }
-                            val hasVotersSocialCredit = viewModel.votersTotal > 0
-                            if (!hasVotersSocialCredit && viewModel.aigcSupportVoterCount <= 0) return
+                            // 本 fork 不显示「XX 人赞同了该回答」，只保留 AIGC 提示
+                            if (viewModel.aigcSupportVoterCount <= 0) return
                             Spacer(modifier = Modifier.height(8.dp))
-                            if (hasVotersSocialCredit) {
-                                val text = viewModel.votersSocialText.ifBlank {
-                                    "${formatCompactCount(viewModel.votersTotal)} 人赞同了该$contentLabel"
-                                }
-                                val votersTextModifier = if (article.type == ArticleType.Answer) {
-                                    Modifier.clickable {
-                                        showVoters = true
-                                        if (viewModel.voters.isEmpty()) {
-                                            viewModel.loadMoreVoters(environment, reset = true)
-                                        }
-                                    }
-                                } else {
-                                    Modifier
-                                }
-                                Text(
-                                    text = text,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = votersTextModifier,
-                                )
-                            }
-                            if (viewModel.aigcSupportVoterCount > 0) {
-                                if (hasVotersSocialCredit) {
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                }
-                                Text(
-                                    text = "有 ${formatCompactCount(viewModel.aigcSupportVoterCount)} 人认为此${contentLabel}包含AIGC内容",
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.error,
-                                )
-                            }
+                            Text(
+                                text = "有 ${formatCompactCount(viewModel.aigcSupportVoterCount)} 人认为此${contentLabel}包含AIGC内容",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error,
+                            )
                         }
 
                         if (viewModel.content.isNotEmpty() || viewModel.attachment != null) {
@@ -1018,7 +992,7 @@ fun ArticleScreen(
                                 Spacer(Modifier.height(12.dp))
                             }
                             val hasPinnedDate = pinAnswerDate
-                            val hasSocialCredit = viewModel.votersTotal > 0 || viewModel.aigcSupportVoterCount > 0
+                            val hasSocialCredit = viewModel.aigcSupportVoterCount > 0
                             val endorsements = viewModel.endorsements
                             val hasEndorsements = endorsements.isNotEmpty()
                             if (hasPinnedDate || hasSocialCredit || hasEndorsements) {

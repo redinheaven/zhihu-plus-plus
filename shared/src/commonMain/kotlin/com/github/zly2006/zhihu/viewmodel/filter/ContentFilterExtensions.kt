@@ -23,11 +23,13 @@ import com.github.zly2006.zhihu.data.DataHolder
 import com.github.zly2006.zhihu.data.FeedDisplayItem
 import com.github.zly2006.zhihu.data.navDestination
 import com.github.zly2006.zhihu.data.questionAuthor
+import com.github.zly2006.zhihu.data.questionId
 import com.github.zly2006.zhihu.data.target
 import com.github.zly2006.zhihu.filter.ContentOpenEventSupport
 import com.github.zly2006.zhihu.navigation.Article
 import com.github.zly2006.zhihu.navigation.NavDestination
 import com.github.zly2006.zhihu.navigation.Pin
+import com.github.zly2006.zhihu.navigation.Question
 import com.github.zly2006.zhihu.platform.SettingsStore
 import com.github.zly2006.zhihu.util.Log
 import kotlinx.coroutines.async
@@ -100,6 +102,7 @@ class FeedContentFilterPipeline(
     private val blockedKeywordDao: BlockedKeywordDao,
     private val blockedUserDao: BlockedUserDao,
     private val blockedQuestionAuthorDao: BlockedQuestionAuthorDao,
+    private val blockedQuestionDao: BlockedQuestionDao,
     private val blockedTopicDao: BlockedTopicDao,
     private val blockedKeywordService: BlockedKeywordService,
     private val onNlpBlocked: suspend (List<FilterableContent>) -> Unit = {},
@@ -107,6 +110,13 @@ class FeedContentFilterPipeline(
     suspend fun filter(contents: List<FilterableContent>): FeedContentFilterResult {
         val blocked = mutableListOf<Pair<FilterableContent, String>>()
         var filteredContents = contents
+
+        val blockedQuestionIds = blockedQuestionDao.getAllQuestionIds().toHashSet()
+        if (blockedQuestionIds.isNotEmpty()) {
+            val (removed, kept) = filteredContents.partition { it.questionId in blockedQuestionIds }
+            removed.forEach { blocked.add(it to "屏蔽问题") }
+            filteredContents = kept
+        }
 
         if (settings.enableUserBlocking) {
             val blockedUserIds = blockedUserDao.getAllUsers().mapTo(hashSetOf()) { it.userId }
@@ -421,7 +431,11 @@ fun FeedDisplayItem.toFilterableContent(
     contentType = identity.type,
     raw = rawContent,
     isFollowing = rawContent.author?.isFollowing ?: false,
-    questionId = (rawContent as? DataHolder.Answer)?.question?.id,
+    questionId = when (rawContent) {
+        is DataHolder.Answer -> rawContent.question.id
+        is DataHolder.Question -> rawContent.id
+        else -> feed?.target?.questionId ?: (navDestination as? Question)?.questionId
+    },
     questionAuthorName = feed?.target?.questionAuthor?.name ?: when (rawContent) {
         is DataHolder.Answer -> rawContent.question.author?.name
         is DataHolder.Question -> rawContent.author.name

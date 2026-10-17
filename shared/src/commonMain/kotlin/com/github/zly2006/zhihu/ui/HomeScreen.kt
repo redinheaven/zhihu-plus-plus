@@ -104,6 +104,7 @@ import com.github.zly2006.zhihu.data.Feed
 import com.github.zly2006.zhihu.data.MOBILE_NOTIFICATION_MESSAGE_URL
 import com.github.zly2006.zhihu.data.MobileNotificationMessageOverview
 import com.github.zly2006.zhihu.data.RecommendationMode
+import com.github.zly2006.zhihu.data.networkReconnected
 import com.github.zly2006.zhihu.data.target
 import com.github.zly2006.zhihu.filter.RemoteHistorySync
 import com.github.zly2006.zhihu.navigation.Account
@@ -161,6 +162,7 @@ import com.github.zly2006.zhihu.viewmodel.QualityFilterMode
 import com.github.zly2006.zhihu.viewmodel.feed.BaseFeedViewModel
 import com.github.zly2006.zhihu.viewmodel.feed.HomeFeedInteractionViewModel
 import com.github.zly2006.zhihu.viewmodel.feed.HomeFeedViewModel
+import com.github.zly2006.zhihu.viewmodel.feed.blockableQuestion
 import com.github.zly2006.zhihu.viewmodel.local.LocalHomeFeedViewModel
 import com.github.zly2006.zhihu.viewmodel.rememberPaginationEnvironment
 import com.github.zly2006.zhihu.viewmodel.za.AndroidHomeFeedViewModel
@@ -472,6 +474,13 @@ fun HomeScreen(
                     delay(HOME_NOTIFICATION_REFRESH_INTERVAL_MILLIS)
                 }
             }
+        }
+    }
+
+    // 断网进入离线显示后，网络恢复时自动刷新
+    LaunchedEffect(viewModel) {
+        networkReconnected.collect {
+            if (viewModel.networkUnavailable) viewModel.refresh(paginationEnvironment)
         }
     }
 
@@ -905,6 +914,15 @@ fun HomeScreen(
                                                 userName = authorInfo.second,
                                             )
                                         }
+                                    },
+                                )
+                            }
+                            item.blockableQuestion()?.let { (questionId, questionTitle) ->
+                                DropdownMenuItem(
+                                    text = { Text("屏蔽问题") },
+                                    onClick = {
+                                        dismissMenu()
+                                        viewModel.handleBlockQuestion(userMessages, questionId, questionTitle)
                                     },
                                 )
                             }

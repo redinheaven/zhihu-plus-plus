@@ -52,7 +52,7 @@ import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SecondaryTabRow
+import androidx.compose.material3.SecondaryScrollableTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -77,6 +77,7 @@ import com.github.zly2006.zhihu.platform.platformName
 import com.github.zly2006.zhihu.platform.rememberUserMessageSink
 import com.github.zly2006.zhihu.util.Log
 import com.github.zly2006.zhihu.viewmodel.filter.BlockedKeyword
+import com.github.zly2006.zhihu.viewmodel.filter.BlockedQuestion
 import com.github.zly2006.zhihu.viewmodel.filter.BlockedQuestionAuthor
 import com.github.zly2006.zhihu.viewmodel.filter.BlockedTopic
 import com.github.zly2006.zhihu.viewmodel.filter.BlockedUser
@@ -145,16 +146,19 @@ fun BlocklistSettingsScreen(
         add("屏蔽用户")
         add("屏蔽提问者")
         add("屏蔽主题")
+        add("屏蔽问题")
     }
     val nlpTab = if (nlpSupported) 1 else -1
     val blockedUsersTab = if (nlpSupported) 2 else 1
     val blockedQuestionAuthorsTab = blockedUsersTab + 1
     val blockedTopicsTab = blockedQuestionAuthorsTab + 1
+    val blockedQuestionsTab = blockedTopicsTab + 1
 
     var loadedBlockedKeywords by remember { mutableStateOf<List<BlockedKeyword>>(emptyList()) }
     var loadedBlockedUsers by remember { mutableStateOf<List<BlockedUser>>(emptyList()) }
     var loadedBlockedQuestionAuthors by remember { mutableStateOf<List<BlockedQuestionAuthor>>(emptyList()) }
     var loadedBlockedTopics by remember { mutableStateOf<List<BlockedTopic>>(emptyList()) }
+    var blockedQuestions by remember { mutableStateOf<List<BlockedQuestion>>(emptyList()) }
     var loadedStats by remember { mutableStateOf<BlocklistStats?>(null) }
 
     val blockedKeywords = loadedBlockedKeywords
@@ -180,6 +184,7 @@ fun BlocklistSettingsScreen(
                 loadedBlockedUsers = database.blockedUserDao().getAllUsers()
                 loadedBlockedQuestionAuthors = database.blockedQuestionAuthorDao().getAllUsers()
                 loadedBlockedTopics = database.blockedTopicDao().getAllTopics()
+                blockedQuestions = database.blockedQuestionDao().getAllQuestions()
                 loadedStats = BlocklistStats(
                     keywordCount = database.blockedKeywordDao().getKeywordCount(),
                     userCount = database.blockedUserDao().getUserCount(),
@@ -338,7 +343,7 @@ fun BlocklistSettingsScreen(
             }
 
             // 标签页
-            SecondaryTabRow(
+            SecondaryScrollableTabRow(
                 selectedTabIndex = selectedTab,
                 modifier = Modifier.testTag(BlocklistSettingsTestTags.TAB_ROW),
             ) {
@@ -495,6 +500,40 @@ fun BlocklistSettingsScreen(
                         }
                     },
                 )
+                blockedQuestionsTab -> if (blockedQuestions.isEmpty()) {
+                    Text(
+                        "暂无屏蔽问题，可在首页卡片菜单中选择「屏蔽问题」",
+                        modifier = Modifier.fillMaxWidth().padding(32.dp),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                } else {
+                    LazyColumn {
+                        items(blockedQuestions, key = { it.questionId }) { question ->
+                            ListItem(
+                                headlineContent = { Text(question.title) },
+                                supportingContent = { Text("ID: ${question.questionId}") },
+                                trailingContent = {
+                                    IconButton(
+                                        onClick = {
+                                            coroutineScope.launch {
+                                                database.blockedQuestionDao().deleteQuestion(question.questionId)
+                                                userMessages.showShortMessage("已取消屏蔽问题")
+                                                loadData()
+                                            }
+                                        },
+                                    ) {
+                                        Icon(
+                                            Icons.Default.Delete,
+                                            contentDescription = "删除",
+                                            tint = MaterialTheme.colorScheme.error,
+                                        )
+                                    }
+                                },
+                            )
+                        }
+                    }
+                }
             }
         }
     }

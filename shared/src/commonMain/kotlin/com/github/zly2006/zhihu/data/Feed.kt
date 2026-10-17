@@ -509,6 +509,13 @@ val Feed.Target.questionAuthor: Person?
         else -> null
     }
 
+val Feed.Target.questionId: Long?
+    get() = when (this) {
+        is Feed.AnswerTarget -> question.id
+        is Feed.QuestionTarget -> id
+        else -> null
+    }
+
 @Serializable
 data class Relationship(
     val isFollowing: Boolean = false,

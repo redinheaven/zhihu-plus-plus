@@ -26,6 +26,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.fleeksoft.ksoup.Ksoup
 import com.github.zly2006.zhihu.data.AigcVoteFlagRequest
 import com.github.zly2006.zhihu.data.AigcVoteFlagResponse
 import com.github.zly2006.zhihu.data.AigcVoteFlagStatusResponse
@@ -265,7 +266,19 @@ class ArticleViewModel(
                             authorName = answer.author.name
                             authorId = answer.author.id
                             authorUrlToken = answer.author.urlToken
-                            content = answer.content // 本 fork 不显示段评划线
+                            // 本 fork 不显示段评划线；去掉开头单独成段的「谢邀 @XX」
+                            content = answer.content.let { html ->
+                                val doc = Ksoup.parseBodyFragment(html).apply { outputSettings().prettyPrint(false) }
+                                val body = doc.body()
+                                val first = body.children().firstOrNull()
+                                val firstText = first?.text()?.trim().orEmpty()
+                                if (first != null && firstText.length <= 40 && thanksForInvitePrefixes.any(firstText::startsWith)) {
+                                    first.remove()
+                                    body.html()
+                                } else {
+                                    html
+                                }
+                            }
                             attachment = answer.attachment
                             authorBio = answer.author.headline
                             authorAvatarSrc = answer.author.avatarUrl
@@ -279,7 +292,8 @@ class ArticleViewModel(
                             updatedAt = answer.updatedTime
                             createdAt = answer.createdTime
                             ipInfo = answer.ipInfo
-                            endorsements = answer.endorsementItems
+                            // 本 fork 不显示知乎的「收录到 XXX」标记
+                            endorsements = answer.endorsementItems.filterNot { "收录" in it.text }
                             topics = emptyList()
 
                             environment.postHistoryDestination(
@@ -314,8 +328,6 @@ class ArticleViewModel(
                                     toCachedContent(sourceLabel = sharedData.navigator?.sourceName ?: "此问题"),
                                 )
                             }
-                            loadAnswerRelationshipEndorsement(environment)
-                            loadMoreVoters(environment, reset = true)
 
                             // 仅在无前向历史时预取下一个回答
                             withContext(Dispatchers.Main.immediate) {
@@ -613,10 +625,6 @@ class ArticleViewModel(
                 voteUpState = newState
                 voteUpCount = response["voteup_count"]!!.jsonPrimitive.int
                 votersTotal = voteUpCount
-                if (article.type == ArticleType.Answer) {
-                    loadAnswerRelationshipEndorsement(environment)
-                    loadMoreVoters(environment, reset = true)
-                }
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
@@ -1126,6 +1134,8 @@ fun formatArticleDateTime(seconds: Long): String {
         append(dateTime.second.twoDigitString())
     }
 }
+
+private val thanksForInvitePrefixes = listOf("谢邀", "谢谢邀请", "感谢邀请")
 
 @Serializable
 private data class AnswerRelationshipEndorsement(

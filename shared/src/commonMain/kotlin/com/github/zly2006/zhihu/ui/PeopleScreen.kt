@@ -46,16 +46,19 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -101,14 +104,18 @@ import com.github.zly2006.zhihu.navigation.Pin
 import com.github.zly2006.zhihu.navigation.Question
 import com.github.zly2006.zhihu.platform.rememberExternalUrlOpener
 import com.github.zly2006.zhihu.platform.rememberImagePreviewOpener
+import com.github.zly2006.zhihu.platform.rememberSettingsStore
 import com.github.zly2006.zhihu.platform.rememberUserMessageSink
 import com.github.zly2006.zhihu.platform.rememberZhihuWebUrlOpener
 import com.github.zly2006.zhihu.reading.RegisterReadingQueueSource
 import com.github.zly2006.zhihu.ui.components.AuthorBadge
+import com.github.zly2006.zhihu.ui.components.AuthorNoteText
 import com.github.zly2006.zhihu.ui.components.FeedCard
 import com.github.zly2006.zhihu.ui.components.PageTurnTarget
 import com.github.zly2006.zhihu.ui.components.PaginatedList
 import com.github.zly2006.zhihu.ui.components.ProgressIndicatorFooter
+import com.github.zly2006.zhihu.ui.components.USER_NOTE_MAX_LENGTH
+import com.github.zly2006.zhihu.ui.components.UserNotes
 import com.github.zly2006.zhihu.ui.components.pageTurnViewportWithGuide
 import com.github.zly2006.zhihu.ui.components.rememberPageTurnTarget
 import com.github.zly2006.zhihu.util.Log
@@ -1666,6 +1673,33 @@ private fun UserInfoHeader(
     val coroutineScope = rememberCoroutineScope()
     val openImagePreview = rememberImagePreviewOpener()
     val openExternalUrl = rememberExternalUrlOpener()
+    val settings = rememberSettingsStore()
+    var showNoteDialog by remember { mutableStateOf(false) }
+    if (showNoteDialog) {
+        var note by remember { mutableStateOf(UserNotes.get(settings, viewModel.memberHashId, null).orEmpty()) }
+        AlertDialog(
+            onDismissRequest = { showNoteDialog = false },
+            title = { Text("备注") },
+            text = {
+                OutlinedTextField(
+                    value = note,
+                    onValueChange = { note = it.take(USER_NOTE_MAX_LENGTH) },
+                    singleLine = true,
+                    placeholder = { Text("最多 $USER_NOTE_MAX_LENGTH 个字，留空即删除") },
+                    supportingText = { Text("${note.length}/$USER_NOTE_MAX_LENGTH") },
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    UserNotes.set(settings, viewModel.memberHashId, viewModel.name, note)
+                    showNoteDialog = false
+                }) { Text("保存") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showNoteDialog = false }) { Text("取消") }
+            },
+        )
+    }
     Column(
         modifier = modifier.padding(vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -1695,6 +1729,7 @@ private fun UserInfoHeader(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false),
                     )
+                    AuthorNoteText(viewModel.memberHashId, viewModel.name, MaterialTheme.typography.titleMedium)
                     viewModel.officialBadge?.let { badge ->
                         AuthorBadge(
                             badge = badge,
@@ -1782,6 +1817,9 @@ private fun UserInfoHeader(
                 modifier = Modifier.testTag(PEOPLE_SCREEN_QUESTION_AUTHOR_BLOCK_BUTTON_TAG),
             ) {
                 Text(if (viewModel.isBlockedAsQuestionAuthor) "取消屏蔽其提问" else "屏蔽其提问")
+            }
+            OutlinedButton(onClick = { showNoteDialog = true }, enabled = viewModel.memberHashId.isNotEmpty()) {
+                Text("备注")
             }
         }
         Row(

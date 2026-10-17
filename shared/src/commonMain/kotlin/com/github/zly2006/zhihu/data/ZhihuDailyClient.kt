@@ -50,7 +50,8 @@ private suspend fun HttpClient.fetchDailyStories(path: String): DailyStoriesResp
     },
 )
 
-private fun Throwable.isHostResolutionFailure(): Boolean =
+/** 域名解析失败，通常是断网或飞行模式。 */
+fun Throwable.isHostResolutionFailure(): Boolean =
     this is UnresolvedAddressException ||
         this::class.simpleName == "UnknownHostException" ||
         message?.contains("Unable to resolve host", ignoreCase = true) == true ||

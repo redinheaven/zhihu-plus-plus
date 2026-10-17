@@ -131,7 +131,7 @@ Windows 上直接跑全量 `./gradlew ktlintFormat` 会在 `shared-local-db` 的
 5. **签名**：Release 签名读取环境变量 `signingKey` 等（见 `app/build.gradle.kts` 的 `signingConfigs`），不要把密钥写进仓库。
 6. **提交**：commit / PR 标题以 `feat:` / `fix:` / `refactor:` 开头，正文用中文。`feat` / `fix` 按相对基线的产品变化判定：新增用户可见行为是 `feat`，既有行为回归才是 `fix`。未经用户确认不要 commit 或 push。
 7. **构建产物**：本地生成的 Maven 仓库、jar、klib、APK 等不得提交。
-8. **自用安装包**：给用户手机用的 APK 复制到仓库根目录 `=release/`，命名 `zhihu++jev-v<版本>.apk`（`*.apk` 已被 git 忽略）。从 v1.3 起是 release 构建（R8 压缩，约 6 MB，比 debug 包流畅）：`./gradlew :app:assembleRelease` 得到未签名包，再用 `build-tools/36.0.0` 的 `zipalign -p 4` 和 `apksigner sign --ks C:\Users\Administrator\.android\debug.keystore --ks-key-alias androiddebugkey`（密码 `android`）签名；`apksigner.bat` 会把路径里的 `=` 当分隔符，先输出到别处再复制进 `=release/`。release 包不可调试，`run-as` 读不了数据库，要查数据时临时装 debug 包。v1.0、v1.2 是 debug 构建，同样用这个 keystore 签名，版本号显示为「上游 `app.versionName` + 本 fork 后缀」，后缀在 `app/build.gradle.kts` 的 `versionNameSuffix`（如 `-jev1.4`，显示 `0.31-jev1.4`），发新版时改这里；`gradle.properties` 不动，避免合并冲突。这个 keystore 要妥善保留：换签名后不能覆盖安装。APK 内含 Jev API Key，不要分发。
+8. **自用安装包**：给用户手机用的 APK 复制到仓库根目录 `=release/`，命名 `zhihu++jev-v<版本>.apk`（`*.apk` 已被 git 忽略）。从 v1.3 起是 release 构建（R8 压缩，约 6 MB，比 debug 包流畅）：`./gradlew :app:assembleRelease` 得到未签名包，再用 `build-tools/36.0.0` 的 `zipalign -p 4` 和 `apksigner sign --ks C:\Users\Administrator\.android\debug.keystore --ks-key-alias androiddebugkey`（密码 `android`）签名；`apksigner.bat` 会把路径里的 `=` 当分隔符，先输出到别处再复制进 `=release/`。release 包不可调试，`run-as` 读不了数据库，要查数据时临时装 debug 包。v1.0、v1.2 是 debug 构建，同样用这个 keystore 签名，版本号显示为「上游 `app.versionName` + 本 fork 后缀」，后缀在 `app/build.gradle.kts` 的 `versionNameSuffix`（如 `-jev1.5`，显示 `0.31-jev1.5`），发新版时改这里；`gradle.properties` 不动，避免合并冲突。这个 keystore 要妥善保留：换签名后不能覆盖安装。APK 内含 Jev API Key，不要分发。
 
    | 版本 | 日期 | 内容 |
    | --- | --- | --- |
@@ -139,6 +139,7 @@ Windows 上直接跑全量 `./gradlew ktlintFormat` 会在 `shared-local-db` 的
    | v1.2 | 2026-10-16 | v1.0 + 系统云端备份 + 设置页「数据同步」（完整数据合并写入用户选的文件、立刻同步、从文件恢复） |
    | v1.3 | 2026-10-17 | 改为 release 构建；性能（已读标记一次读入内存、卡片标题摘要解析缓存）；推荐页广告卡过滤、离线预下载作者头像、首次读到回答底部提示上拉切换、同步失败在设置入口标红、下拉刷新第一页到了就收起刷新圈；质量屏蔽默认隐藏；界面精简（去段评划线、去创作按钮、话题菜单折叠等，见魔改记录）；精简：删除系统云端备份（改为数据同步每日自动同步）、列表自带正文保存、打开回答时的上次阅读提示；Jev 关键词建议改为点击触发；遥测默认关闭 |
    | v1.4 | 2026-10-17 | 版本号显示 `0.31-jev1.4`；文章页顶栏随正文同步折叠、去掉松手吸附，折叠时不再每帧重排正文；首页 Web 端推荐每页按发布时间从新到旧（可关）；去掉上游交流群入口，许可证 / issue / 导出页脚链接改指向本 fork |
+| v1.5 | 2026-10-17 | 卡片菜单「屏蔽问题」（按问题 ID，屏蔽列表新增标签页，数据库 v10）；作者备注（作者页「备注」按钮，名字右侧显示）；回答页去掉「XX 人赞同了该回答」、开头的「谢邀 @XX」段落和「收录」徽章；断网时不再反复弹出网络错误，网络恢复后首页自动刷新 |
 
 ## 上游规则的取舍
 
@@ -207,7 +208,7 @@ $ADB shell svc wifi disable; $ADB shell svc data disable   # 模拟断网，测�
 - 已读标记：`FeedCard` 用 `content_open_events`（本地打开 + 同步的知乎浏览历史）在详情行前显示「3 天前读过」。
 - 屏蔽入口：账号页新增「屏蔽列表」直达入口；首页卡片「按关键词屏蔽」弹窗支持手动输入，可选「普通屏蔽词」（带匹配范围，每个词一条规则）或「AI 主题（Jev）」，点「Jev 建议」才请求 Jev 提取关键词，结果只作为可点选的建议（默认不选），弹窗底部可跳到屏蔽列表；屏蔽列表的 NLP 标签页改名「AI 屏蔽主题」。
 - 数据同步：`shared/src/androidMain/.../ui/subscreens/AndroidSubscreenRuntimes.kt` 的 `CloudFileSyncSettings`（设置 → 系统与更新）。用 SAF 选一个文件，写入两个 SharedPreferences、`account.json`、`history.json` 和两个 Room 数据库的全部表（排除离线正文和本地推荐的爬虫缓存三表）；同步 = 本机与文件合并后写回文件（冲突以本机为准），恢复 = 文件合并进本机（冲突以文件为准）后重启应用。`MainActivity` 启动时距上次成功同步超过一天会自动同步（`syncCloudFileIfDue`）。系统自动备份配置保持上游原样，曾经的 `ConfigBackupAgent` 已删除。
-- 版本号加后缀 `-jev<版本>`（当前 `-jev1.4`）；去掉设置页「交流 & 闲聊」（上游 Discord / Telegram / issue）；许可证链接、实验性 UI 页脚的 issue 链接、文章导出页脚的 GitHub 地址改指向本 fork（导出署名改为「知乎++ Jev」）。
+- 版本号加后缀 `-jev<版本>`（当前 `-jev1.5`）；去掉设置页「交流 & 闲聊」（上游 Discord / Telegram / issue）；许可证链接、实验性 UI 页脚的 issue 链接、文章导出页脚的 GitHub 地址改指向本 fork（导出署名改为「知乎++ Jev」）。
 - 文章页顶栏：`TwoRowsTopAppBar.kt` 的 `rememberContentLinkedScrollBehavior` 让折叠量等于正文滚动距离（不先消费滚动、不吸附），`ArticleScreen` 正文顶部边距固定为展开高度，顶栏覆盖在正文上折叠；原 `PreferCollapsedExitUntilCollapsedScrollBehavior` 与吸附代码已删除。很短的回答可能收不完顶栏。
 - 首页排序：设置「推荐系统与内容过滤 → 按发布时间排序」（`homeFeedSortByPublishTime`，默认开），`HomeFeedViewModel.processResponse` 把每页按 `target.created_time` 从新到旧重排（外层 `created_time` 是请求时刻，不能用）。安卓端推荐卡片实测不带任何时间字段，所以安卓端推荐不受影响、混合推荐只排网页端那部分。
 - 遥测 `allowTelemetry` 默认值改为 false（`Utils.kt` 与设置页两处）。
@@ -215,6 +216,10 @@ $ADB shell svc wifi disable; $ADB shell svc data disable   # 模拟断网，测�
 - 质量屏蔽：默认模式由「屏蔽规则」（留「已屏蔽」占位卡）改为「隐藏」；「隐藏」原先只在首页 `HomeFeedViewModel` 生效，现在 `BaseFeedViewModel.processResponse` 也会去掉占位，关注、热榜、搜索、问题回答列表等都不再留占位（`QualityFilterModeTest` 覆盖）。
 - 性能：卡片的「读过」标签不再每张卡各查一次数据库，`ContentOpenEventSupport.lastOpenedAt` 首次用到时整表读入（`getLastOpenedTimes`），之后随打开记录和远端历史同步增量更新；`parseEmphasizedHtmlTextWithTheme` 用 `remember` 缓存解析结果。
 - 交互：安卓推荐接口（`parseMobileHomeFeedDisplayItem`）丢掉作者位置以「广告」开头的卡片；离线保存正文时把作者头像一并预下载；第一次读到回答底部（有下一个回答时）提示一次「继续上拉切换」（偏好 `answerSwitchHintShown`）；数据同步上次失败时，账号页「系统与更新」副标题显示红字「数据同步失败」（`CLOUD_SYNC_LAST_ERROR_KEY` 移到 common）；下拉刷新时第一页到了就收起刷新圈，第二页在列表底部继续加载。
+- 屏蔽问题：`blocked_questions` 表（数据库 v10，`BlockedQuestion` / `BlockedQuestionDao`），`FeedContentFilterPipeline` 按 `FilterableContent.questionId` 过滤（回答取所在问题，问题卡片取自身）；首页 / 关注页卡片菜单「屏蔽问题」（`BaseFeedViewModel.handleBlockQuestion`、`FeedDisplayItem.blockableQuestion`），屏蔽列表新增「屏蔽问题」标签页（标签栏改为可滑动）。屏蔽规则 JSON 导入导出未包含屏蔽问题（数据同步会带上）。
+- 作者备注：`ui/components/UserNotes.kt`，按用户 ID 存在偏好 `userNotes`（JSON），最多 9 字；作者页按钮行末尾「备注」，首页卡片和作者页名字右侧显示，安卓推荐卡片在详情加载前按作者名回退匹配。
+- 回答页精简：不显示「XX 人赞同了该回答」（同时不再请求赞同关系和赞同者列表，上游代码保留未调用）；正文第一段以「谢邀 / 谢谢邀请 / 感谢邀请」开头且不超过 40 字时删掉；过滤文字含「收录」的回答徽章（endorsements）。
+- 断网处理：`PaginationViewModel.networkUnavailable`，域名解析失败（`isHostResolutionFailure`）后只提示一次「网络不可用」，不再自动加载下一页（原来列表底部每 50ms 重试、不停弹错误）；`MainActivity` 监听系统网络，恢复且验证可上网时发 `networkReconnected`，离线状态的首页自动刷新。
 - 上游 CI（`.github/workflows`）仍按 full / lite 构建并发布到上游 release，本 fork 未改，不要直接启用。
 
 ## 已知问题与待办

@@ -99,6 +99,7 @@ import com.github.zly2006.zhihu.ui.topLevelReselectAction
 import com.github.zly2006.zhihu.viewmodel.feed.FollowRecommendViewModel
 import com.github.zly2006.zhihu.viewmodel.feed.FollowViewModel
 import com.github.zly2006.zhihu.viewmodel.feed.RecentMomentsViewModel
+import com.github.zly2006.zhihu.viewmodel.feed.blockableQuestion
 import com.github.zly2006.zhihu.viewmodel.rememberPaginationEnvironment
 import kotlinx.coroutines.launch
 
@@ -449,6 +450,15 @@ fun FollowRecommendScreen(
                                 },
                             )
                         }
+                        item.blockableQuestion()?.let { (questionId, questionTitle) ->
+                            DropdownMenuItem(
+                                text = { Text("屏蔽问题") },
+                                onClick = {
+                                    dismissMenu()
+                                    viewModel.handleBlockQuestion(userMessages, questionId, questionTitle)
+                                },
+                            )
+                        }
                         val topics = when (val raw = item.raw) {
                             is DataHolder.Answer -> raw.question.topics
                             is DataHolder.Question -> raw.topics
@@ -596,6 +606,15 @@ fun FollowDynamicScreen(
                                             authorInfo.second,
                                         )
                                     }
+                                },
+                            )
+                        }
+                        item.blockableQuestion()?.let { (questionId, questionTitle) ->
+                            DropdownMenuItem(
+                                text = { Text("屏蔽问题") },
+                                onClick = {
+                                    dismissMenu()
+                                    viewModel.handleBlockQuestion(userMessages, questionId, questionTitle)
                                 },
                             )
                         }

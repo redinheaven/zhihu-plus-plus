@@ -55,6 +55,7 @@ class FeedContentFilterPipelineTest {
             blockedKeywordDao = database.blockedKeywordDao(),
             blockedUserDao = database.blockedUserDao(),
             blockedQuestionAuthorDao = database.blockedQuestionAuthorDao(),
+            blockedQuestionDao = database.blockedQuestionDao(),
             blockedTopicDao = database.blockedTopicDao(),
             blockedKeywordService = keywordService,
         ).filter(
@@ -108,6 +109,7 @@ class FeedContentFilterPipelineTest {
             blockedKeywordDao = database.blockedKeywordDao(),
             blockedUserDao = database.blockedUserDao(),
             blockedQuestionAuthorDao = database.blockedQuestionAuthorDao(),
+            blockedQuestionDao = database.blockedQuestionDao(),
             blockedTopicDao = database.blockedTopicDao(),
             blockedKeywordService = keywordService,
         ).filter(
@@ -140,6 +142,7 @@ class FeedContentFilterPipelineTest {
             blockedKeywordDao = keywordDao,
             blockedUserDao = database.blockedUserDao(),
             blockedQuestionAuthorDao = database.blockedQuestionAuthorDao(),
+            blockedQuestionDao = database.blockedQuestionDao(),
             blockedTopicDao = database.blockedTopicDao(),
             blockedKeywordService = BlockedKeywordService(keywordDao, database.blockedContentRecordDao(), null),
         ).filter(

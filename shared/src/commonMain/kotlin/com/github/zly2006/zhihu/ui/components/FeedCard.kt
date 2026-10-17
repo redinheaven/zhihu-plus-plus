@@ -65,6 +65,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -315,6 +316,15 @@ private fun FeedCardContent(
     val navigator = LocalNavigator.current
     val visiblePinImages = pinImages.takeIf { showFeedThumbnail && !item.isFiltered }.orEmpty()
     val sourceLabel = item.feed?.sourceLabel.takeUnless { item.isFiltered }
+    val authorId = item.feed
+        ?.target
+        ?.author
+        ?.id
+        ?.takeIf { it.isNotEmpty() } ?: when (val raw = item.raw) {
+        is DataHolder.Answer -> raw.author.id
+        is DataHolder.Article -> raw.author.id
+        else -> null
+    }
     // 读过的内容在详情行前标出上次阅读时间
     val readIdentity = remember(item) { item.navDestination?.let(ContentOpenEventSupport::toTrackedContentIdentity) }
     val lastOpenedTimes by ContentOpenEventSupport.lastOpenedAt.collectAsState()
@@ -422,6 +432,7 @@ private fun FeedCardContent(
                                     overflow = TextOverflow.Ellipsis,
                                     modifier = Modifier.weight(1f, fill = false),
                                 )
+                                AuthorNoteText(authorId, authorName, MaterialTheme.typography.labelMedium)
                                 val authorBadge = item.authorBadgeV2.officialBadge()
                                 if (authorBadge?.isUsefulInList == true) {
                                     Spacer(Modifier.width(4.dp))
@@ -487,6 +498,7 @@ private fun FeedCardContent(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false),
                 )
+                AuthorNoteText(authorId, authorName, TextStyle(fontSize = 14.sp))
                 val authorBadge = item.authorBadgeV2.officialBadge()
                 if (authorBadge?.isUsefulInList == true) {
                     Spacer(Modifier.width(4.dp))
