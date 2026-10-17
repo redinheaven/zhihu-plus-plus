@@ -54,6 +54,7 @@ import coil3.request.ImageRequest
 import coil3.request.crossfade
 import com.github.zly2006.zhihu.data.AccountData
 import com.github.zly2006.zhihu.data.HistoryStorage
+import com.github.zly2006.zhihu.data.networkAvailable
 import com.github.zly2006.zhihu.data.networkReconnected
 import com.github.zly2006.zhihu.data.offlineImagePrefetcher
 import com.github.zly2006.zhihu.filter.ContentOpenEventSupport
@@ -149,8 +150,8 @@ class MainActivity : ComponentActivity() {
         history = HistoryStorage(this)
         AccountData.loadData(this)
         AndroidThemeSettings.initialize(this)
-        androidKeywordSemanticMatcher = JevKeywordSemanticMatcher
-        androidKeywordWeightExtractor = JevKeywordWeightExtractor
+        androidKeywordSemanticMatcher = JevKeywordSemanticMatcher(androidSettingsStore(this))
+        androidKeywordWeightExtractor = JevKeywordWeightExtractor(androidSettingsStore(this))
         registerNetworkReconnectCallback()
         offlineImagePrefetcher = { urls ->
             // 离线阅读的图片预下载只在 Wi-Fi 等不按流量计费的网络下进行；只为写入磁盘缓存，不保留内存、按极小尺寸解码
@@ -536,23 +537,28 @@ class MainActivity : ComponentActivity() {
 
 private var networkReconnectCallbackRegistered = false
 
-/** 监听系统网络：从不可上网变为已验证可上网时发出 [networkReconnected]。进程内只注册一次，Activity 重建不重复注册。 */
+/**
+ * 监听系统网络：维护 [networkAvailable]，从不可上网变为已验证可上网时发出 [networkReconnected]。
+ * 进程内只注册一次，Activity 重建不重复注册。
+ */
 private fun Context.registerNetworkReconnectCallback() {
     if (networkReconnectCallbackRegistered) return
     networkReconnectCallbackRegistered = true
-    applicationContext.getSystemService(ConnectivityManager::class.java)?.registerDefaultNetworkCallback(
+    val connectivityManager = applicationContext.getSystemService(ConnectivityManager::class.java) ?: return
+    // 开机就没网时不会有任何回调，先按当前状态初始化
+    networkAvailable.value = connectivityManager.activeNetwork
+        ?.let(connectivityManager::getNetworkCapabilities)
+        ?.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED) == true
+    connectivityManager.registerDefaultNetworkCallback(
         object : ConnectivityManager.NetworkCallback() {
-            // 注册时的首次回调不算「恢复」
-            private var validated = true
-
             override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) {
                 val nowValidated = capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
-                if (nowValidated && !validated) networkReconnected.tryEmit(Unit)
-                validated = nowValidated
+                if (nowValidated && !networkAvailable.value) networkReconnected.tryEmit(Unit)
+                networkAvailable.value = nowValidated
             }
 
             override fun onLost(network: Network) {
-                validated = false
+                networkAvailable.value = false
             }
         },
     )

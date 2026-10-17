@@ -37,6 +37,7 @@ import com.github.zly2006.zhihu.data.fetchZhihuAuthenticatedJson
 import com.github.zly2006.zhihu.data.fetchZhihuContentDetail
 import com.github.zly2006.zhihu.data.getOrFetchContentDetail
 import com.github.zly2006.zhihu.data.isHostResolutionFailure
+import com.github.zly2006.zhihu.data.networkAvailable
 import com.github.zly2006.zhihu.navigation.AnswerNavigator
 import com.github.zly2006.zhihu.navigation.Article
 import com.github.zly2006.zhihu.navigation.NavDestination
@@ -64,6 +65,7 @@ import io.ktor.http.isSuccess
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.JsonArray
@@ -99,12 +101,17 @@ abstract class PaginationViewModel<T : Any>(
     protected abstract val initialUrl: String
     private var currentJob: Job? = null
     private var refreshChainJob: Job? = null
+    protected var hostResolutionRetries = 0
+    private var hostResolutionRetryJob: Job? = null
 
     /** 每次刷新连续加载的页数；首页设为 2，多下载一倍内容供离线阅读 */
     protected open val pagesPerRefresh: Int = 1
     protected open val shouldLogDecodeFailures: Boolean = true
 
     protected open fun resolvePageUrl(): String = lastPaging?.next ?: initialUrl
+
+    /** 联着网但域名解析失败时，子类可以改用另一个主机：返回 true 表示已切换，立即重试，不计入静默重试次数 */
+    protected open fun switchHostAfterResolutionFailure(): Boolean = false
 
     /**
      * Generally used fields to include in the API request.
@@ -116,9 +123,11 @@ abstract class PaginationViewModel<T : Any>(
         currentJob?.cancel()
         currentJob = null
         refreshChainJob?.cancel()
+        hostResolutionRetryJob?.cancel()
         isLoading = false
         errorMessage = null
         networkUnavailable = false
+        hostResolutionRetries = 0
         debugData.clear()
         allData.clear()
         lastPaging = null // 重置 lastPaging
@@ -186,7 +195,7 @@ abstract class PaginationViewModel<T : Any>(
             throw RuntimeException("您可能已被风控，请重新登录。")
         } catch (e: Exception) {
             if (!e.isHostResolutionFailure()) environment.handleFetchFailure(this::class.simpleName, e)
-            errorHandle(e)
+            errorHandle(e, environment)
         } finally {
             isLoading = false
         }
@@ -194,21 +203,54 @@ abstract class PaginationViewModel<T : Any>(
 
     @OptIn(DelicateCoroutinesApi::class)
     open fun loadMore(environment: PaginationEnvironment) {
-        if (isLoading || isEnd || networkUnavailable) return // 使用新的isEnd getter
+        // 等待域名解析重试期间也不加载，免得列表底部的自动加载跳过等待
+        if (isLoading || isEnd || networkUnavailable || hostResolutionRetryJob?.isActive == true) return
         isLoading = true
         currentJob = viewModelScope.launch {
+            val pagingBefore = lastPaging
             try {
                 fetchFeeds(environment)
+                if (lastPaging !== pagingBefore) hostResolutionRetries = 0
             } catch (e: Exception) {
-                errorHandle(e)
+                errorHandle(e, environment)
             }
         }
     }
 
-    protected fun errorHandle(e: Exception) {
+    protected fun errorHandle(e: Exception, environment: PaginationEnvironment) {
         if (e !is CancellationException) {
+            if (e.isHostResolutionFailure() && networkAvailable.value && switchHostAfterResolutionFailure()) {
+                isLoading = false
+                // 稍等再发：当前请求的 finally 还要把 isLoading 置回 false
+                hostResolutionRetryJob = viewModelScope.launch {
+                    delay(300)
+                    hostResolutionRetryJob = null
+                    loadMore(environment)
+                }
+                return
+            }
+            if (e.isHostResolutionFailure() && networkAvailable.value && hostResolutionRetries < 2) {
+                // 系统显示联着网时域名解析偶发失败（刚从后台回来、Wi-Fi 切换、DNS 抖动），等 1s、2s 静默重试，不提示
+                hostResolutionRetries++
+                isLoading = false
+                hostResolutionRetryJob = viewModelScope.launch {
+                    delay(1000L * hostResolutionRetries)
+                    hostResolutionRetryJob = null
+                    loadMore(environment)
+                }
+                return
+            }
+            hostResolutionRetries = 0
             networkUnavailable = e.isHostResolutionFailure()
-            errorMessage = if (networkUnavailable) "网络不可用" else e.message
+            errorMessage = when {
+                !networkUnavailable -> e.message
+                // 带上解析失败的域名：api.zhihu.com 要经 CDN 别名二次解析，比 www.zhihu.com 更容易在家用路由器上失败
+                networkAvailable.value -> {
+                    val host = e.message?.let { Regex("""resolve host "?([\w.-]+)""").find(it)?.groupValues?.get(1) } ?: "知乎"
+                    "连接 $host 失败（域名解析出错），请下拉刷新重试"
+                }
+                else -> "网络不可用"
+            }
             isLoading = false
         }
     }

@@ -84,6 +84,7 @@ abstract class BaseFeedViewModel : PaginationViewModel<Feed>(typeOf<Feed>()) {
         if (isLoading) return
         errorMessage = null
         networkUnavailable = false
+        hostResolutionRetries = 0
         debugData.clear()
         allData.clear()
         lastPaging = null // 重置 lastPaging
@@ -98,7 +99,7 @@ abstract class BaseFeedViewModel : PaginationViewModel<Feed>(typeOf<Feed>()) {
                 fetchFeeds(environment)
             }
         } catch (e: Exception) {
-            errorHandle(e)
+            errorHandle(e, environment)
         }
         isLoading = false
         isPullToRefresh = false

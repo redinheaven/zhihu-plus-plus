@@ -34,13 +34,10 @@ object KeywordAnalyzerCore {
     ): List<KeywordWithWeight> = withContext(Dispatchers.Default) {
         if (title.isBlank()) return@withContext emptyList()
 
-        runCatching {
-            val weightedText = buildWeightedText(title, excerpt, content)
-            val keywordsWithWeight = extractor.extractKeywordsWithWeight(weightedText, topN * 3)
-            processKeywordsWithWeight(keywordsWithWeight, topN)
-        }.getOrElse {
-            emptyList()
-        }
+        // 本 fork：不吞掉异常，「Jev 建议」弹窗要把「未填写 API Key」等原因提示给用户
+        val weightedText = buildWeightedText(title, excerpt, content)
+        val keywordsWithWeight = extractor.extractKeywordsWithWeight(weightedText, topN * 3)
+        processKeywordsWithWeight(keywordsWithWeight, topN)
     }
 
     fun buildWeightedText(

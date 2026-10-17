@@ -220,7 +220,7 @@ fun BlockByKeywordsDialog(
                     extractedKeywords = keywordsWithWeight.take(8).map { it.keyword }
                 } catch (e: Exception) {
                     Log.e("FeedBlocking", "Failed to extract block keywords", e)
-                    userMessages.showShortMessage("提取关键词失败: ${e.message}")
+                    userMessages.showLongMessage("提取关键词失败：${e.message}")
                 } finally {
                     isLoading = false
                 }

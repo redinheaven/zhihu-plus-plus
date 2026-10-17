@@ -30,6 +30,7 @@ import com.github.zly2006.zhihu.util.extractImageUrl
 import com.github.zly2006.zhihu.viewmodel.filter.OfflineContent
 import com.github.zly2006.zhihu.viewmodel.filter.getContentFilterDatabase
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
@@ -133,6 +134,12 @@ var offlineImagePrefetcher: (List<String>) -> Unit = {}
 
 /** 网络恢复（系统确认可以上网）时由平台发出，离线状态的首页据此自动刷新；目前只有 Android 发出。 */
 val networkReconnected = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
+/**
+ * 系统当前是否有已验证可上网的网络；目前只有 Android 更新，其他平台恒为 true。
+ * 用来区分「真的断网」和「联着网但域名解析偶发失败」（刚从后台回来、Wi-Fi 切换、DNS 抖动）。
+ */
+val networkAvailable = MutableStateFlow(true)
 
 /** 保存一条内容详情 JSON 供离线阅读。 */
 private suspend fun saveOfflineContent(key: String, type: String, json: JsonObject) {

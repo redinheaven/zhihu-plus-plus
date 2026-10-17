@@ -20,6 +20,7 @@ package com.github.zly2006.zhihu.nlp
 import android.icu.text.BreakIterator
 import android.util.Log
 import com.github.zly2006.zhihu.BuildConfig
+import com.github.zly2006.zhihu.platform.SettingsStore
 import com.github.zly2006.zhihu.viewmodel.filter.KeywordSemanticMatcher
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.android.Android
@@ -44,14 +45,30 @@ import java.util.Locale
 private const val TAG = "Jev"
 private val client = HttpClient(Android)
 
+const val PREF_TYPESAFE_API_KEY = "typesafeApiKey"
+const val PREF_CF_ACCOUNT_ID = "cloudflareAccountId"
+const val PREF_CF_API_TOKEN = "cloudflareApiToken"
+const val JEV_MISSING_KEY_MESSAGE = "未填写 AI 屏蔽的 API Key，请到「账号 → 屏蔽列表 → AI 屏蔽主题」填写"
+
+/** AI 屏蔽用的 Key：用户在设置里填的优先，没填时用构建时从 local.properties 注入的（作者自用包） */
+class JevKeys(
+    settings: SettingsStore,
+) {
+    val typesafe = settings.getString(PREF_TYPESAFE_API_KEY, "").trim().ifEmpty { BuildConfig.TYPESAFE_API_KEY }
+    val cfAccountId = settings.getString(PREF_CF_ACCOUNT_ID, "").trim().ifEmpty { BuildConfig.CF_ACCOUNT_ID }
+    val cfApiToken = settings.getString(PREF_CF_API_TOKEN, "").trim().ifEmpty { BuildConfig.CF_API_TOKEN }
+    val isConfigured get() = typesafe.isNotEmpty() || (cfAccountId.isNotEmpty() && cfApiToken.isNotEmpty())
+}
+
 /**
  * 发一组 noul 判断题，返回每题“是”的概率；两个服务都不可用时返回 null。
  * 先问 TypeSafe Jev；Jev 未配置 Key、请求失败（额度用完、服务故障、网络问题）或 3 秒内没有响应时，改问 Cloudflare Workers AI 的 clef-flash。
  * 两者题型和返回格式相同，只是 Cloudflare 的返回外面多包一层 `result`。
- * Key 在构建时从 local.properties（`typesafe.apiKey`、`cloudflare.accountId`、`cloudflare.apiToken`）或同名环境变量注入。
+ * Key 见 [JevKeys]：用户在 AI 屏蔽主题页填写，或构建时从 local.properties（`typesafe.apiKey`、`cloudflare.accountId`、`cloudflare.apiToken`）注入。
  * Cloudflare 只走官方 API：`*.workers.dev` 在中国大陆被 DNS 污染、无法连接。
  */
 private suspend fun askJev(
+    keys: JevKeys,
     state: String,
     instructions: List<String>,
     criteriaTrue: String,
@@ -96,25 +113,29 @@ private suspend fun askJev(
     }
 
     // Jev 正常约 0.3～0.6 秒；卡住时网络库默认要等很久才失败，3 秒没响应就改问 clef-flash
-    return withTimeoutOrNull(3000) { post("jev-latest", "https://api.typesafe.ai/v1/systemone", BuildConfig.TYPESAFE_API_KEY) { it } }
-        ?: BuildConfig.CF_ACCOUNT_ID.takeIf { it.isNotEmpty() }?.let { accountId ->
+    return withTimeoutOrNull(3000) { post("jev-latest", "https://api.typesafe.ai/v1/systemone", keys.typesafe) { it } }
+        ?: keys.cfAccountId.takeIf { it.isNotEmpty() }?.let { accountId ->
             post(
                 "clef-flash",
                 "https://api.cloudflare.com/client/v4/accounts/$accountId/ai/run/@cf/cloudflare/clef-flash",
-                BuildConfig.CF_API_TOKEN,
+                keys.cfApiToken,
             ) { it["result"]!!.jsonObject }
         }
 }
 
-/** AI 屏蔽：每个屏蔽主题一道判断题，返回“内容属于该主题”的概率达到阈值的主题。 */
-object JevKeywordSemanticMatcher : KeywordSemanticMatcher {
+/** AI 屏蔽：每个屏蔽主题一道判断题，返回“内容属于该主题”的概率达到阈值的主题；没填 Key 时不屏蔽。 */
+class JevKeywordSemanticMatcher(
+    private val settings: SettingsStore,
+) : KeywordSemanticMatcher {
     override suspend fun checkBlockedPhrases(
         text: String,
         blockedPhrases: List<String>,
         threshold: Double,
     ): List<Pair<String, Double>> {
-        if (text.isBlank()) return emptyList()
+        val keys = JevKeys(settings)
+        if (text.isBlank() || !keys.isConfigured) return emptyList()
         val scores = askJev(
+            keys = keys,
             state = text,
             instructions = blockedPhrases.map { "这条知乎内容的主要话题属于「$it」" },
             criteriaTrue = "内容主要在讨论该话题，或该话题是内容的重要组成部分",
@@ -129,10 +150,14 @@ object JevKeywordSemanticMatcher : KeywordSemanticMatcher {
 
 /**
  * 关键词提取：Jev 不生成文本，所以先用系统 ICU 分词切出候选词，再让 Jev 判断每个候选词能否代表内容主题，
- * 按概率从高到低返回。
+ * 按概率从高到低返回。只在用户点「Jev 建议」时调用，没填 Key 时抛出提示让弹窗告诉用户去哪填。
  */
-object JevKeywordWeightExtractor : KeywordWeightExtractor {
+class JevKeywordWeightExtractor(
+    private val settings: SettingsStore,
+) : KeywordWeightExtractor {
     override suspend fun extractKeywordsWithWeight(text: String, topN: Int): List<KeywordWithWeight> {
+        val keys = JevKeys(settings)
+        check(keys.isConfigured) { JEV_MISSING_KEY_MESSAGE }
         val breaker = BreakIterator.getWordInstance(Locale.CHINESE).apply { setText(text) }
         val candidates = generateSequence(breaker.first()) { breaker.next().takeIf { it != BreakIterator.DONE } }
             .zipWithNext { start, end -> text.substring(start, end).trim() }
@@ -145,6 +170,7 @@ object JevKeywordWeightExtractor : KeywordWeightExtractor {
             .take(40)
             .toList()
         val scores = askJev(
+            keys = keys,
             state = text,
             instructions = candidates.map { "「$it」是这条内容涉及的一个具体话题、事物或领域" },
             criteriaTrue = "该词指代内容中实际讨论的具体话题、事物、概念或领域",

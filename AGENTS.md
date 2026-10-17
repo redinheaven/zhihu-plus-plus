@@ -79,7 +79,7 @@ Windows 上直接跑全量 `./gradlew ktlintFormat` 会在 `shared-local-db` 的
   - 仓库根目录 `local.properties` 写有 `sdk.dir` 和 `typesafe.apiKey`（git 已忽略，不入库）。
 - 新版 `sdkmanager` 包名用 `/` 分隔，例如 `sdkmanager "platforms/android-37.0"`，旧的 `;` 写法会报 `Package not found`。在 agent 会话里用管道喂 `y` 接受许可时，sdkmanager 偶尔会卡住不下载；中途杀掉会留下解压一半的镜像（缺 `vendor.img` / `userdata.img`），要删掉目录重装。
 - 未安装 Rust / `cargo-ndk` / NDK / `gh`：Android 构建已不需要 Rust，仅改其他 Rust crate 时才需要。
-- Jev 的 API Key 在构建时从 `local.properties` 的 `typesafe.apiKey`（或环境变量 `TYPESAFE_API_KEY`）读取并打进 APK；回退用的 Cloudflare 账号 ID 和 Token 同样来自 `cloudflare.accountId` / `cloudflare.apiToken`（或 `CF_ACCOUNT_ID` / `CF_API_TOKEN`）。
+- AI 屏蔽的 Key 优先用用户在「AI 屏蔽主题」页填写的（偏好 `typesafeApiKey` / `cloudflareAccountId` / `cloudflareApiToken`，见 `Jev.kt` 的 `JevKeys`），留空时用构建时注入的默认值：Jev 的 API Key 从 `local.properties` 的 `typesafe.apiKey`（或环境变量 `TYPESAFE_API_KEY`）读取并打进 APK；回退用的 Cloudflare 账号 ID 和 Token 同样来自 `cloudflare.accountId` / `cloudflare.apiToken`（或 `CF_ACCOUNT_ID` / `CF_API_TOKEN`）。
 - 仓库 `core.symlinks=false`，上游的符号链接在 Windows 上会被检出为内容是目标路径的普通文本文件，修改这类文件时注意不要误提交类型变更（`AGENTS.md` 曾被误存为符号链接模式，已改回普通文件）。
 - 编译耗时：首次 debug 约 20 分钟，之后增量编译 1～3 分钟。项目默认的 Gradle / Kotlin 内存参数在本机够用，不需要本机覆盖；不要修改仓库内 `gradle.properties` 的内存参数（会与上游冲突）。
 - Gradle 配置缓存和构建缓存默认开启；改了构建脚本后遇到奇怪问题可加 `--no-configuration-cache` 排查。
@@ -131,7 +131,7 @@ Windows 上直接跑全量 `./gradlew ktlintFormat` 会在 `shared-local-db` 的
 5. **签名**：Release 签名读取环境变量 `signingKey` 等（见 `app/build.gradle.kts` 的 `signingConfigs`），不要把密钥写进仓库。
 6. **提交**：commit / PR 标题以 `feat:` / `fix:` / `refactor:` 开头，正文用中文。`feat` / `fix` 按相对基线的产品变化判定：新增用户可见行为是 `feat`，既有行为回归才是 `fix`。未经用户确认不要 commit 或 push。
 7. **构建产物**：本地生成的 Maven 仓库、jar、klib、APK 等不得提交。
-8. **自用安装包**：给用户手机用的 APK 复制到仓库根目录 `=release/`，命名 `zhihu++jev-v<版本>.apk`（`*.apk` 已被 git 忽略）。从 v1.3 起是 release 构建（R8 压缩，约 6 MB，比 debug 包流畅）：`./gradlew :app:assembleRelease` 得到未签名包，再用 `build-tools/36.0.0` 的 `zipalign -p 4` 和 `apksigner sign --ks C:\Users\Administrator\.android\debug.keystore --ks-key-alias androiddebugkey`（密码 `android`）签名；`apksigner.bat` 会把路径里的 `=` 当分隔符，先输出到别处再复制进 `=release/`。release 包不可调试，`run-as` 读不了数据库，要查数据时临时装 debug 包。v1.0、v1.2 是 debug 构建，同样用这个 keystore 签名，版本号显示为「上游 `app.versionName` + 本 fork 后缀」，后缀在 `app/build.gradle.kts` 的 `versionNameSuffix`（如 `-jev1.8`，显示 `0.31-jev1.8`），发新版时改这里；`gradle.properties` 不动，避免合并冲突。这个 keystore 要妥善保留：换签名后不能覆盖安装。APK 内含 Jev API Key，不要分发。
+8. **自用安装包**：给用户手机用的 APK 复制到仓库根目录 `=release/`，命名 `zhihu++jev-v<版本>.apk`（`*.apk` 已被 git 忽略）。从 v1.3 起是 release 构建（R8 压缩，约 6 MB，比 debug 包流畅）：`./gradlew :app:assembleRelease` 得到未签名包，再用 `build-tools/36.0.0` 的 `zipalign -p 4` 和 `apksigner sign --ks C:\Users\Administrator\.android\debug.keystore --ks-key-alias androiddebugkey`（密码 `android`）签名；`apksigner.bat` 会把路径里的 `=` 当分隔符，先输出到别处再复制进 `=release/`。release 包不可调试，`run-as` 读不了数据库，要查数据时临时装 debug 包。v1.0、v1.2 是 debug 构建，同样用这个 keystore 签名，版本号显示为「上游 `app.versionName` + 本 fork 后缀」，后缀在 `app/build.gradle.kts` 的 `versionNameSuffix`（如 `-jev1.9`，显示 `0.31-jev1.9`），发新版时改这里；`gradle.properties` 不动，避免合并冲突。这个 keystore 要妥善保留：换签名后不能覆盖安装。APK 内含 Jev API Key，不要分发。
 
    | 版本 | 日期 | 内容 |
    | --- | --- | --- |
@@ -143,6 +143,7 @@ Windows 上直接跑全量 `./gradlew ktlintFormat` 会在 `shared-local-db` 的
 | v1.6 | 2026-10-17 | Jev 3 秒无响应或失败时回退到 Cloudflare Workers AI 的 clef-flash；点卡片作者名进入作者主页 |
 | v1.7 | 2026-10-17 | 删除所有连上游服务器的功能（遥测、在线通知、更新检查、AIGC 标记、崩溃上报、首页「知乎++新动态」）和防沉迷；公式字体打包进 APK，App 只连知乎和 Jev / Cloudflare；护眼配色（米白背景、降低文字反差）；卡片菜单去掉「屏蔽提问者」；屏蔽用户后只移除该作者卡片不整页刷新 |
 | v1.8 | 2026-10-17 | 新图标（青墨绿玻璃高光底 + 米白「知」）；回答页不显示任何徽章；评论字号缩到与首页摘要一致（14sp）；屏蔽带「认证信息」的作者（关注的人除外）；回答卡片显示收藏数 |
+| v1.9 | 2026-10-18 | AI 屏蔽 Key 可在 App 内填写（没填时明确提示）；联网时域名解析偶发失败不再误报「网络不可用」（静默重试两次，提示带出失败的域名），首页 api.zhihu.com 解析失败时改用 www.zhihu.com；评论超过 500 字折叠；评论左滑改为屏蔽评论者（需确认）；README 改为大白话 |
 
 ## 上游规则的取舍
 
@@ -211,7 +212,7 @@ $ADB shell svc wifi disable; $ADB shell svc data disable   # 模拟断网，测�
 - 已读标记：`FeedCard` 用 `content_open_events`（本地打开 + 同步的知乎浏览历史）在详情行前显示「3 天前读过」。
 - 屏蔽入口：账号页新增「屏蔽列表」直达入口；首页卡片「按关键词屏蔽」弹窗支持手动输入，可选「普通屏蔽词」（带匹配范围，每个词一条规则）或「AI 主题（Jev）」，点「Jev 建议」才请求 Jev 提取关键词，结果只作为可点选的建议（默认不选），弹窗底部可跳到屏蔽列表；屏蔽列表的 NLP 标签页改名「AI 屏蔽主题」。
 - 数据同步：`shared/src/androidMain/.../ui/subscreens/AndroidSubscreenRuntimes.kt` 的 `CloudFileSyncSettings`（设置 → 系统与更新）。用 SAF 选一个文件，写入两个 SharedPreferences、`account.json`、`history.json` 和两个 Room 数据库的全部表（排除离线正文和本地推荐的爬虫缓存三表）；同步 = 本机与文件合并后写回文件（冲突以本机为准），恢复 = 文件合并进本机（冲突以文件为准）后重启应用。`MainActivity` 启动时距上次成功同步超过一天会自动同步（`syncCloudFileIfDue`）。系统自动备份配置保持上游原样，曾经的 `ConfigBackupAgent` 已删除。
-- 版本号加后缀 `-jev<版本>`（当前 `-jev1.8`）；去掉设置页「交流 & 闲聊」（上游 Discord / Telegram / issue）；许可证链接、实验性 UI 页脚的 issue 链接、文章导出页脚的 GitHub 地址改指向本 fork（导出署名改为「知乎++ Jev」）。
+- 版本号加后缀 `-jev<版本>`（当前 `-jev1.9`）；去掉设置页「交流 & 闲聊」（上游 Discord / Telegram / issue）；许可证链接、实验性 UI 页脚的 issue 链接、文章导出页脚的 GitHub 地址改指向本 fork（导出署名改为「知乎++ Jev」）。
 - 文章页顶栏：`TwoRowsTopAppBar.kt` 的 `rememberContentLinkedScrollBehavior` 让折叠量等于正文滚动距离（不先消费滚动、不吸附），`ArticleScreen` 正文顶部边距固定为展开高度，顶栏覆盖在正文上折叠；原 `PreferCollapsedExitUntilCollapsedScrollBehavior` 与吸附代码已删除。很短的回答可能收不完顶栏。
 - 首页排序：设置「推荐系统与内容过滤 → 按发布时间排序」（`homeFeedSortByPublishTime`，默认开），`HomeFeedViewModel.processResponse` 把每页按 `target.created_time` 从新到旧重排（外层 `created_time` 是请求时刻，不能用）。安卓端推荐卡片实测不带任何时间字段，所以安卓端推荐不受影响、混合推荐只排网页端那部分。
 - 删除遥测（`telemetry()`、登录前第三页遥测声明、设置项）、首页在线通知（`OnlineHomeNotification`）、AIGC 标记（`AigcVoteModels`、`AigcVoteEnvironment`、文章页标记面板与菜单项、设置项）、未接入的 `CrashReporter`、防沉迷提醒（`ContinuousUsageReminderManager` 与设置项；原 `ZhihuPolicy.kt` 只剩 `expect object Log`，改名 `Log.kt`）。
@@ -232,6 +233,9 @@ $ADB shell svc wifi disable; $ADB shell svc data disable   # 模拟断网，测�
 - 评论正文与作者名由 16sp 改为 14sp（`CommentScreen.kt`），与首页卡片摘要一致。
 - 屏蔽认证用户：`hasIdentityCertification()`（`OfficialBadge.kt`，徽章标题「认证」/「已认证的个人」，即作者页「认证信息」）；首页 `FeedContentFilterPipeline`（原因「屏蔽认证用户」，受屏蔽用户总开关控制）、问题回答列表、搜索结果过滤，关注的人除外。
 - 回答收藏数：`Feed.AnswerTarget.favoriteCount` 改为可空并兼容 `favlists_count`；首页网页推荐叫 `favorite_count`，关注推荐和问题回答列表叫 `favlists_count`，关注动态不返回（不显示）。文章卡片未核实，暂不显示。
+- AI 屏蔽 Key 可在 App 内填写：「AI 屏蔽主题」页的 API Key 卡片（`NLPKeywordManagementScreen.kt` 的 `JevApiKeyCard`），只存本机偏好，留空用构建时内置的；没 Key 时 AI 屏蔽静默不生效，「Jev 建议」提示去哪填（`KeywordAnalyzerCore.extractFromFeedWithWeight` 不再吞异常）。
+- 网络误报：`networkAvailable`（`ContentDetailCache.kt`，由 `MainActivity` 的网络回调维护）区分真断网与联网时解析失败；`PaginationViewModel.errorHandle` 在联网时先静默重试两次（1s、2s），再提示「连接 <域名> 失败」，真断网才提示「网络不可用」。子类可覆盖 `switchHostAfterResolutionFailure`：`HomeFeedViewModel` 在 api.zhihu.com 解析失败后改用 `www.zhihu.com/api/v3/feed/topstory/recommend`（实测结构一致，只少卡片缩略图）。
+- 评论：超过 500 字折叠，「展开全文 / 收起」；左滑由回复改为屏蔽评论者（确认后写入屏蔽用户，并从当前评论区移除）。
 - 上游 CI（`.github/workflows`）仍按 full / lite 构建并发布到上游 release，本 fork 未改，不要直接启用。
 
 ## 已知问题与待办

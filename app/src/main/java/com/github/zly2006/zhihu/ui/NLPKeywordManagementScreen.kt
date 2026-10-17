@@ -70,8 +70,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
-import com.github.zly2006.zhihu.BuildConfig
+import com.github.zly2006.zhihu.nlp.JevKeys
+import com.github.zly2006.zhihu.nlp.PREF_CF_ACCOUNT_ID
+import com.github.zly2006.zhihu.nlp.PREF_CF_API_TOKEN
+import com.github.zly2006.zhihu.nlp.PREF_TYPESAFE_API_KEY
 import com.github.zly2006.zhihu.platform.androidSettingsStore
 import com.github.zly2006.zhihu.viewmodel.filter.BlockedContentRecord
 import com.github.zly2006.zhihu.viewmodel.filter.BlockedKeyword
@@ -324,17 +328,11 @@ fun NLPPhraseManagementTab(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onPrimaryContainer,
                     )
-                    if (BuildConfig.TYPESAFE_API_KEY.isEmpty() && BuildConfig.CF_API_TOKEN.isEmpty()) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            "构建时未配置 TypeSafe 或 Cloudflare 的 API Key，AI 屏蔽不会生效",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.error,
-                        )
-                    }
                 }
             }
         }
+
+        item { JevApiKeyCard() }
 
         // 判定阈值设置
         item {
@@ -747,4 +745,74 @@ fun EditPhraseDialog(
             }
         },
     )
+}
+
+/** AI 屏蔽需要用户自己申请的 Key，只存在本机设置里；留空时用安装包构建时内置的 Key（如有） */
+@Composable
+private fun JevApiKeyCard() {
+    val context = LocalContext.current
+    val settings = remember(context) { androidSettingsStore(context) }
+    var typesafe by remember { mutableStateOf(settings.getString(PREF_TYPESAFE_API_KEY, "")) }
+    var cfAccountId by remember { mutableStateOf(settings.getString(PREF_CF_ACCOUNT_ID, "")) }
+    var cfApiToken by remember { mutableStateOf(settings.getString(PREF_CF_API_TOKEN, "")) }
+    var configured by remember { mutableStateOf(JevKeys(settings).isConfigured) }
+
+    Card {
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text("API Key", style = MaterialTheme.typography.titleMedium)
+            Text(
+                when {
+                    !configured -> "未填写，AI 屏蔽和「Jev 建议」不会生效"
+                    typesafe.isBlank() && cfApiToken.isBlank() -> "正在使用安装包内置的 Key；在下面填写后以你填的为准"
+                    else -> "已配置，AI 屏蔽和「Jev 建议」可以使用"
+                },
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (configured) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+            )
+            Text(
+                "AI 屏蔽需要自己申请 Key，二选一即可：\n" +
+                    "· TypeSafe：到 typesafe.ai 注册后获取 API Key\n" +
+                    "· Cloudflare：到 dash.cloudflare.com 注册，复制账号 ID，再创建一个有 Workers AI 权限的 API Token\n" +
+                    "两个都填时优先用 TypeSafe，3 秒没响应改用 Cloudflare。Key 只保存在本机。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            OutlinedTextField(
+                value = typesafe,
+                onValueChange = { typesafe = it },
+                label = { Text("TypeSafe API Key") },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = cfAccountId,
+                onValueChange = { cfAccountId = it },
+                label = { Text("Cloudflare 账号 ID") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = cfApiToken,
+                onValueChange = { cfApiToken = it },
+                label = { Text("Cloudflare API Token") },
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Button(
+                onClick = {
+                    settings.putString(PREF_TYPESAFE_API_KEY, typesafe.trim())
+                    settings.putString(PREF_CF_ACCOUNT_ID, cfAccountId.trim())
+                    settings.putString(PREF_CF_API_TOKEN, cfApiToken.trim())
+                    configured = JevKeys(settings).isConfigured
+                    Toast.makeText(context, "已保存", Toast.LENGTH_SHORT).show()
+                },
+                modifier = Modifier.align(Alignment.End),
+            ) { Text("保存") }
+        }
+    }
 }

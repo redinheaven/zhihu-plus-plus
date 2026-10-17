@@ -168,6 +168,22 @@ class HomeFeedViewModel :
 
     override val pagesPerRefresh = 2
 
+    /**
+     * api.zhihu.com 要经 CDN 别名（eo.dnse0.com）二次解析，部分家用路由器上会解析失败，而 www.zhihu.com 正常。
+     * 两个推荐接口实测返回结构一致（www 版不带卡片缩略图），所以 api 解析失败后本次运行改用 www 版。
+     */
+    private var useWebHost = false
+
+    override fun resolvePageUrl(): String =
+        if (useWebHost) {
+            lastPaging?.next?.takeIf { it.startsWith("https://www.zhihu.com/") }
+                ?: "https://www.zhihu.com/api/v3/feed/topstory/recommend?desktop=true&limit=10"
+        } else {
+            super.resolvePageUrl()
+        }
+
+    override fun switchHostAfterResolutionFailure(): Boolean = !useWebHost.also { useWebHost = true }
+
     public override suspend fun fetchFeeds(environment: PaginationEnvironment) {
         markItemsAsTouched(environment)
         super.fetchFeeds(environment)

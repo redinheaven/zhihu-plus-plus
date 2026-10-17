@@ -66,6 +66,7 @@ import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.automirrored.outlined.Comment
 import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.filled.Archive
+import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
@@ -149,6 +150,7 @@ import com.github.zly2006.zhihu.platform.rememberImagePreviewOpener
 import com.github.zly2006.zhihu.platform.rememberImageSaver
 import com.github.zly2006.zhihu.platform.rememberImageSharer
 import com.github.zly2006.zhihu.platform.rememberSettingsStore
+import com.github.zly2006.zhihu.platform.rememberUserMessageSink
 import com.github.zly2006.zhihu.reading.ReadingCommentOrder
 import com.github.zly2006.zhihu.reading.loadReadingPreferences
 import com.github.zly2006.zhihu.reading.saveReadingPreferences
@@ -165,6 +167,8 @@ import com.github.zly2006.zhihu.viewmodel.comment.BaseCommentViewModel
 import com.github.zly2006.zhihu.viewmodel.comment.ChildCommentViewModel
 import com.github.zly2006.zhihu.viewmodel.comment.CommentSortOrder
 import com.github.zly2006.zhihu.viewmodel.comment.RootCommentViewModel
+import com.github.zly2006.zhihu.viewmodel.filter.BlockedUser
+import com.github.zly2006.zhihu.viewmodel.filter.getContentFilterDatabase
 import com.github.zly2006.zhihu.viewmodel.rememberPaginationEnvironment
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDateTime
@@ -459,13 +463,15 @@ fun CommentScreen(
     var replyToComment by remember { mutableStateOf<CommentModel?>(null) }
     var showEmojiPicker by remember { mutableStateOf(false) }
     var commentPendingDeletion by remember { mutableStateOf<CommentModel?>(null) }
+    var commentAuthorToBlock by remember { mutableStateOf<DataHolder.Comment.Author?>(null) }
     var isDeletingComment by remember { mutableStateOf(false) }
     var deleteCommentError by remember { mutableStateOf<String?>(null) }
     var isCommentInputFocused by remember { mutableStateOf(false) }
     val pageTurnActive = pageTurnEnabled &&
         !showEmojiPicker &&
         !isCommentInputFocused &&
-        commentPendingDeletion == null
+        commentPendingDeletion == null &&
+        commentAuthorToBlock == null
     val pageTurnTarget = rememberPageTurnTarget(
         listState = listState,
         enabled = pageTurnActive,
@@ -557,6 +563,37 @@ fun CommentScreen(
     val commentInputBarColor = MaterialTheme.colorScheme.surfaceContainer
     val actionChipColor = MaterialTheme.colorScheme.surfaceContainerHigh
     val actionChipIconColor = MaterialTheme.colorScheme.onSurfaceVariant
+
+    // 本 fork：评论左滑改为屏蔽评论者（加入屏蔽列表的屏蔽用户，其评论和首页内容都不再显示）
+    // 协程要挂在对话框外面：点「屏蔽」会先关掉对话框，挂在里面的协程会随之取消
+    val blockScope = rememberCoroutineScope()
+    val blockMessages = rememberUserMessageSink()
+    commentAuthorToBlock?.let { author ->
+        AlertDialog(
+            onDismissRequest = { commentAuthorToBlock = null },
+            title = { Text("屏蔽评论者") },
+            text = { Text("屏蔽「${author.name}」后，TA 的评论和首页内容都不再显示，可在屏蔽列表中取消。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    commentAuthorToBlock = null
+                    blockScope.launch {
+                        getContentFilterDatabase().blockedUserDao().insertUser(
+                            BlockedUser(userId = author.id, userName = author.name, urlToken = author.urlToken, avatarUrl = author.avatarUrl),
+                        )
+                        viewModel.allData.removeAll { it.author.id == author.id }
+                        viewModel.allData.indices.forEach { index ->
+                            val comment = viewModel.allData[index]
+                            viewModel.allData[index] = comment.copy(childComments = comment.childComments.filterNot { it.author.id == author.id })
+                        }
+                        blockMessages.showShortMessage("已屏蔽：${author.name}")
+                    }
+                }) { Text("屏蔽", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { commentAuthorToBlock = null }) { Text("取消") }
+            },
+        )
+    }
 
     commentPendingDeletion?.let { target ->
         AlertDialog(
@@ -946,16 +983,8 @@ fun CommentScreen(
                                     val commentItem = viewModel.createCommentItem(dto, article = rootContent)
                                     SwipeToReplyContainer(
                                         modifier = Modifier.testTag("comment_row_${dto.id}"),
-                                        onReply = {
-                                            if (activeCommentItem == null) {
-                                                if (commentItem.clickTarget != null) {
-                                                    onChildCommentClick(commentItem)
-                                                }
-                                            } else {
-                                                // 滑动回复时设置回复目标。
-                                                replyToComment = commentItem
-                                            }
-                                        },
+                                        onReply = { commentAuthorToBlock = commentItem.item.author },
+                                        replyIcon = Icons.Default.Block,
                                     ) {
                                         Comment(
                                             commentItem,
@@ -1367,15 +1396,28 @@ private fun CommentItem(
                     val settings = rememberSettingsStore()
                     val fontSizePercent = remember { settings.getInt(PREF_FONT_SIZE, 100) }
                     val lineHeightPercent = remember { settings.getInt(PREF_LINE_HEIGHT, 160) }
+                    // 本 fork：超过 500 字的评论先折叠，点「展开全文」再显示全部
+                    var expanded by remember(commentData.id) { mutableStateOf(false) }
+                    val collapsible = string.length > 500
                     SelectionContainer(
                         modifier = Modifier.commentSelectionWorkaround(),
                     ) {
                         Text(
-                            text = string,
+                            text = if (collapsible && !expanded) string.subSequence(0, 500) + AnnotatedString("…") else string,
                             // 与首页卡片摘要同为 14sp（同样跟随阅读字号设置）
                             fontSize = 14.sp * fontSizePercent / 100,
                             lineHeight = 14.sp * fontSizePercent / 100 * lineHeightPercent / 100,
                             inlineContent = inlineContent,
+                        )
+                    }
+                    if (collapsible) {
+                        Text(
+                            text = if (expanded) "收起" else "展开全文",
+                            fontSize = 14.sp,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier
+                                .clickable { expanded = !expanded }
+                                .padding(top = 4.dp),
                         )
                     }
                     if (commentImg != null) {
