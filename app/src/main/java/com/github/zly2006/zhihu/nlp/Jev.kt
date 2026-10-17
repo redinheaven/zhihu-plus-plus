@@ -30,7 +30,9 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.double
 import kotlinx.serialization.json.jsonObject
@@ -43,8 +45,11 @@ private const val TAG = "Jev"
 private val client = HttpClient(Android)
 
 /**
- * 向 TypeSafe Jev 发一组 noul 判断题，返回每题“是”的概率；未配置 Key 或请求失败时返回 null。
- * API Key 在构建时从 local.properties 的 `typesafe.apiKey` 或环境变量 `TYPESAFE_API_KEY` 注入。
+ * 发一组 noul 判断题，返回每题“是”的概率；两个服务都不可用时返回 null。
+ * 先问 TypeSafe Jev；Jev 未配置 Key、请求失败（额度用完、服务故障、网络问题）或 3 秒内没有响应时，改问 Cloudflare Workers AI 的 clef-flash。
+ * 两者题型和返回格式相同，只是 Cloudflare 的返回外面多包一层 `result`。
+ * Key 在构建时从 local.properties（`typesafe.apiKey`、`cloudflare.accountId`、`cloudflare.apiToken`）或同名环境变量注入。
+ * Cloudflare 只走官方 API：`*.workers.dev` 在中国大陆被 DNS 污染、无法连接。
  */
 private suspend fun askJev(
     state: String,
@@ -52,11 +57,12 @@ private suspend fun askJev(
     criteriaTrue: String,
     criteriaFalse: String,
 ): List<Double>? {
-    if (BuildConfig.TYPESAFE_API_KEY.isEmpty() || instructions.isEmpty()) return null
-    val body = buildJsonObject {
-        // 控制费用：开头部分足够判断主题
+    if (instructions.isEmpty()) return null
+
+    fun body(model: String) = buildJsonObject {
+        // 控制费用：开头部分足够判断主题；clef-flash 实测也只读开头约 2k token（约 3000 个汉字）
         put("state", state.take(3000))
-        put("model", "jev-latest")
+        put("model", model)
         putJsonObject("questions") {
             instructions.forEachIndexed { i, instruction ->
                 putJsonObject("q$i") {
@@ -69,21 +75,35 @@ private suspend fun askJev(
                 }
             }
         }
-    }
-    return runCatching {
-        val response = client.post("https://api.typesafe.ai/v1/systemone") {
-            bearerAuth(BuildConfig.TYPESAFE_API_KEY)
-            contentType(ContentType.Application.Json)
-            setBody(body.toString())
+    }.toString()
+
+    suspend fun post(model: String, url: String, token: String, unwrap: (JsonObject) -> JsonObject): List<Double>? {
+        if (token.isEmpty()) return null
+        return runCatching {
+            val response = client.post(url) {
+                bearerAuth(token)
+                contentType(ContentType.Application.Json)
+                setBody(body(model))
+            }
+            val responseText = response.bodyAsText()
+            check(response.status.isSuccess()) { "HTTP ${response.status.value}: $responseText" }
+            val answers = unwrap(Json.parseToJsonElement(responseText).jsonObject)["answers"]!!.jsonObject
+            instructions.indices.map { answers["q$it"]!!.jsonObject["noul"]!!.jsonPrimitive.double }
+        }.getOrElse {
+            Log.e(TAG, "$model request failed", it)
+            null
         }
-        val responseText = response.bodyAsText()
-        check(response.status.isSuccess()) { "HTTP ${response.status.value}: $responseText" }
-        val answers = Json.parseToJsonElement(responseText).jsonObject["answers"]!!.jsonObject
-        instructions.indices.map { answers["q$it"]!!.jsonObject["noul"]!!.jsonPrimitive.double }
-    }.getOrElse {
-        Log.e(TAG, "Jev request failed", it)
-        null
     }
+
+    // Jev 正常约 0.3～0.6 秒；卡住时网络库默认要等很久才失败，3 秒没响应就改问 clef-flash
+    return withTimeoutOrNull(3000) { post("jev-latest", "https://api.typesafe.ai/v1/systemone", BuildConfig.TYPESAFE_API_KEY) { it } }
+        ?: BuildConfig.CF_ACCOUNT_ID.takeIf { it.isNotEmpty() }?.let { accountId ->
+            post(
+                "clef-flash",
+                "https://api.cloudflare.com/client/v4/accounts/$accountId/ai/run/@cf/cloudflare/clef-flash",
+                BuildConfig.CF_API_TOKEN,
+            ) { it["result"]!!.jsonObject }
+        }
 }
 
 /** AI 屏蔽：每个屏蔽主题一道判断题，返回“内容属于该主题”的概率达到阈值的主题。 */

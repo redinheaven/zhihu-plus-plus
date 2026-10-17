@@ -86,6 +86,7 @@ import com.github.zly2006.zhihu.navigation.Account
 import com.github.zly2006.zhihu.navigation.LocalNavigator
 import com.github.zly2006.zhihu.navigation.NavDestination
 import com.github.zly2006.zhihu.navigation.Navigator
+import com.github.zly2006.zhihu.navigation.Person
 import com.github.zly2006.zhihu.navigation.withReadingQueueSource
 import com.github.zly2006.zhihu.platform.UserMessageDuration
 import com.github.zly2006.zhihu.platform.rememberSettingsStore
@@ -316,15 +317,19 @@ private fun FeedCardContent(
     val navigator = LocalNavigator.current
     val visiblePinImages = pinImages.takeIf { showFeedThumbnail && !item.isFiltered }.orEmpty()
     val sourceLabel = item.feed?.sourceLabel.takeUnless { item.isFiltered }
-    val authorId = item.feed
+    // 点作者名进入作者主页；安卓推荐卡片在详情加载前没有作者 ID，这时点作者名和点卡片一样打开内容
+    val authorPerson = item.feed
         ?.target
         ?.author
-        ?.id
-        ?.takeIf { it.isNotEmpty() } ?: when (val raw = item.raw) {
-        is DataHolder.Answer -> raw.author.id
-        is DataHolder.Article -> raw.author.id
-        else -> null
-    }
+        ?.takeIf { it.id.isNotEmpty() }
+        ?.let { Person(it.id, it.urlToken.orEmpty(), it.name) }
+        ?: when (val raw = item.raw) {
+            is DataHolder.Answer -> raw.author
+            is DataHolder.Article -> raw.author
+            else -> null
+        }?.let { Person(it.id, it.urlToken, it.name) }
+    val authorId = authorPerson?.id
+    val authorClickModifier = if (authorPerson != null) Modifier.clickable { navigator.onNavigate(authorPerson) } else Modifier
     // 读过的内容在详情行前标出上次阅读时间
     val readIdentity = remember(item) { item.navDestination?.let(ContentOpenEventSupport::toTrackedContentIdentity) }
     val lastOpenedTimes by ContentOpenEventSupport.lastOpenedAt.collectAsState()
@@ -414,7 +419,7 @@ private fun FeedCardContent(
                                 verticalAlignment = Alignment.CenterVertically,
                                 modifier = Modifier
                                     .weight(1f, fill = false)
-                                    .clickable {},
+                                    .then(authorClickModifier),
                             ) {
                                 AsyncImage(
                                     model = avatarSrc,
@@ -480,7 +485,7 @@ private fun FeedCardContent(
             Spacer(Modifier.height(4.dp))
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.clickable {},
+                modifier = authorClickModifier,
             ) {
                 AsyncImage(
                     model = avatarSrc,

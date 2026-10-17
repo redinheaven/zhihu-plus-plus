@@ -320,14 +320,14 @@ fun NLPPhraseManagementTab(
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        "每条内容会联网交给 TypeSafe Jev 模型判断是否属于你设置的主题。主题用一句话描述效果最好，例如：\"减肥方法和体重管理\"。",
+                        "每条内容会联网交给 TypeSafe Jev 模型判断是否属于你设置的主题（Jev 不可用时改用 Cloudflare 的 clef-flash）。主题用一句话描述效果最好，例如：\"减肥方法和体重管理\"。",
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onPrimaryContainer,
                     )
-                    if (BuildConfig.TYPESAFE_API_KEY.isEmpty()) {
+                    if (BuildConfig.TYPESAFE_API_KEY.isEmpty() && BuildConfig.CF_API_TOKEN.isEmpty()) {
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            "构建时未配置 TypeSafe API Key，AI 屏蔽不会生效",
+                            "构建时未配置 TypeSafe 或 Cloudflare 的 API Key，AI 屏蔽不会生效",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.error,
                         )

@@ -60,17 +60,22 @@ android {
         versionCode = property("app.versionCode").toString().toIntOrNull() ?: 1
         versionName = property("app.versionName").toString()
         // 本 fork 自己的版本，上游版本号保留在前面，便于合并上游时对照
-        versionNameSuffix = "-jev1.5"
+        versionNameSuffix = "-jev1.6"
 
-        val typesafeApiKey =
+        val localProperties =
             rootProject
                 .file("local.properties")
                 .takeIf { it.exists() }
                 ?.let { file -> Properties().apply { file.inputStream().use { load(it) } } }
-                ?.getProperty("typesafe.apiKey")
-                ?: System.getenv("TYPESAFE_API_KEY")
-                ?: ""
-        buildConfigField("String", "TYPESAFE_API_KEY", "\"$typesafeApiKey\"")
+
+        fun secret(
+            property: String,
+            env: String,
+        ) = localProperties?.getProperty(property) ?: System.getenv(env) ?: ""
+        buildConfigField("String", "TYPESAFE_API_KEY", "\"${secret("typesafe.apiKey", "TYPESAFE_API_KEY")}\"")
+        // Jev 不可用时回退到 Cloudflare Workers AI 的 clef-flash
+        buildConfigField("String", "CF_ACCOUNT_ID", "\"${secret("cloudflare.accountId", "CF_ACCOUNT_ID")}\"")
+        buildConfigField("String", "CF_API_TOKEN", "\"${secret("cloudflare.apiToken", "CF_API_TOKEN")}\"")
 
         testInstrumentationRunner = "com.github.zly2006.zhihu.ZhihuInstrumentedTestRunner"
     }
