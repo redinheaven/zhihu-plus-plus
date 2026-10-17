@@ -718,9 +718,6 @@ fun ZhihuMain(
                             composable<Login> {
                                 LoginScreen(
                                     onLoginComplete = { navController.popBackStack() },
-                                    onOpenTelemetrySettings = {
-                                        navController.navigate(Account.SystemAndUpdateSettings("allowTelemetry"))
-                                    },
                                 )
                             }
                             composable<Question> { navEntry ->

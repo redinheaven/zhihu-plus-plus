@@ -69,7 +69,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -101,10 +100,8 @@ import com.github.zly2006.zhihu.ui.components.pageTurnViewportWithGuide
 import com.github.zly2006.zhihu.ui.components.rememberPageTurnTarget
 import com.github.zly2006.zhihu.ui.subscreens.BOTTOM_BAR_ITEMS_PREFERENCE_KEY
 import com.github.zly2006.zhihu.ui.subscreens.CLOUD_SYNC_LAST_ERROR_KEY
-import com.github.zly2006.zhihu.ui.subscreens.SystemUpdateState
 import com.github.zly2006.zhihu.ui.subscreens.defaultBottomBarSelectionKeys
 import com.github.zly2006.zhihu.ui.subscreens.normalizeBottomBarSelection
-import com.github.zly2006.zhihu.ui.subscreens.rememberSystemUpdateState
 import com.github.zly2006.zhihu.ui.subscreens.shouldShowAccountHistoryShortcut
 import com.github.zly2006.zhihu.util.Log
 import kotlinx.coroutines.CancellationException
@@ -159,7 +156,6 @@ fun AccountSettingScreen(
     val copyPlainText = rememberPlainTextClipboard()
     val openSystemUrl = rememberSystemUrlOpener()
     val userMessages = rememberUserMessageSink()
-    val systemUpdateState = rememberSystemUpdateState()
     val versionInfo = rememberAppVersionInfo()
     val readingPlayerSupported = isReadingPlayerSupported
     val launchQrScanner = rememberAccountQrScanAction()
@@ -529,7 +525,7 @@ fun AccountSettingScreen(
                         if (cloudSyncFailed) {
                             Text("数据同步失败，点开查看", color = MaterialTheme.colorScheme.error)
                         } else {
-                            Text("数据同步、遥测、防沉迷等")
+                            Text("数据同步等")
                         }
                     },
                     icon = { Icon(Icons.Default.Settings, null) },
@@ -544,18 +540,6 @@ fun AccountSettingScreen(
                         modifier = Modifier.testTag(ACCOUNT_SETTINGS_DEVELOPER_TAG),
                         onClick = { navigator.onNavigate(Account.DeveloperSettings) },
                     )
-                }
-            }
-
-            val updateState by systemUpdateState.collectAsState()
-            LaunchedEffect(updateState) {
-                if (updateState is SystemUpdateState.UpdateAvailable) {
-                    val state = updateState as SystemUpdateState.UpdateAvailable
-                    val versionType = if (state.isNightly) "Nightly版本" else "正式版本"
-                    userMessages.showShortMessage("发现新$versionType ${state.version}")
-                }
-                if (updateState is SystemUpdateState.Error) {
-                    userMessages.showLongMessage("检查更新失败: ${(updateState as SystemUpdateState.Error).message}")
                 }
             }
 

@@ -81,8 +81,6 @@ actual val isJvm: Boolean = false
 
 actual val isNative: Boolean = false
 
-actual val isAigcVoteSupported: Boolean = true
-
 actual val isBlocklistNlpSupported: Boolean = true
 
 actual val isArticleHtmlExportSupported: Boolean = true

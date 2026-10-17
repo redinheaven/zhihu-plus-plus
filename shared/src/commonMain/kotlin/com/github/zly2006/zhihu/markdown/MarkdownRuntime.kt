@@ -23,10 +23,6 @@ import coil3.compose.LocalPlatformContext
 import coil3.network.NetworkHeaders
 import coil3.network.httpHeaders
 import coil3.request.ImageRequest
-import com.hrm.latex.renderer.font.MathFont
-
-@Composable
-expect fun rememberMarkdownMathFont(): MathFont?
 
 @Composable
 fun rememberMarkdownImageModel(url: String): Any {

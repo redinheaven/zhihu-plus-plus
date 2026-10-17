@@ -199,6 +199,23 @@ abstract class BaseFeedViewModel : PaginationViewModel<Feed>(typeOf<Feed>()) {
         }
     }
 
+    /** 屏蔽用户后只移除该作者的卡片，不整页刷新；安卓推荐卡片在详情加载前没有作者 ID，按作者名匹配 */
+    fun removeItemsByAuthor(userId: String, userName: String) {
+        displayItems.removeAll { item ->
+            val authorId = item.feed
+                ?.target
+                ?.author
+                ?.id ?: when (val raw = item.raw) {
+                is DataHolder.Answer -> raw.author.id
+                is DataHolder.Article -> raw.author.id
+                is DataHolder.Question -> raw.author.id
+                is DataHolder.Pin -> raw.author.id
+                else -> null
+            }
+            if (authorId.isNullOrEmpty()) item.authorName == userName else authorId == userId
+        }
+    }
+
     fun handleBlockQuestion(
         userMessages: UserMessageSink,
         questionId: Long,

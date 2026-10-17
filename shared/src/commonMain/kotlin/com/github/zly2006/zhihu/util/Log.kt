@@ -17,5 +17,28 @@
 
 package com.github.zly2006.zhihu.util
 
-/** 设置项 key：是否允许匿名上报崩溃日志（opt-in，默认关闭）。 */
-const val CRASH_REPORT_ENABLED_PREFERENCE_KEY = "allowCrashReport"
+expect object Log {
+    fun d(
+        tag: String,
+        message: String,
+        throwable: Throwable? = null,
+    )
+
+    fun i(
+        tag: String,
+        message: String,
+        throwable: Throwable? = null,
+    )
+
+    fun w(
+        tag: String,
+        message: String,
+        throwable: Throwable? = null,
+    )
+
+    fun e(
+        tag: String,
+        message: String,
+        throwable: Throwable? = null,
+    )
+}

@@ -87,14 +87,12 @@ import com.github.zly2006.zhihu.ui.components.PageTurnFab
 import com.github.zly2006.zhihu.ui.components.getHighestQualityVideoUrl
 import com.github.zly2006.zhihu.ui.subscreens.PREF_VOLUME_KEY_PAGE_TURN
 import com.github.zly2006.zhihu.ui.subscreens.syncCloudFileIfDue
-import com.github.zly2006.zhihu.util.ContinuousUsageReminderManager
 import com.github.zly2006.zhihu.util.EmojiManager
 import com.github.zly2006.zhihu.util.ZHIHU_WEB_ZSE93
 import com.github.zly2006.zhihu.util.ZhihuCredentialRefresher
 import com.github.zly2006.zhihu.util.clearShareImageCache
 import com.github.zly2006.zhihu.util.clipboardManager
 import com.github.zly2006.zhihu.util.enableEdgeToEdgeCompat
-import com.github.zly2006.zhihu.util.telemetry
 import com.github.zly2006.zhihu.viewmodel.filter.androidKeywordSemanticMatcher
 import com.github.zly2006.zhihu.viewmodel.filter.androidKeywordWeightExtractor
 import com.github.zly2006.zhihu.viewmodel.filter.getContentFilterDatabase
@@ -114,7 +112,6 @@ class MainActivity : ComponentActivity() {
 
     /** 主返回栈控制器，承载 MainTabs 主壳和单栏页面。 */
     lateinit var navController: NavHostController
-    private lateinit var continuousUsageReminderManager: ContinuousUsageReminderManager
     private val pageTurnDispatcher = PageTurnDispatcher()
     private var currentMainTabOpenFrom: String? = null
     var mainTabNavigationTarget by mutableStateOf<TopLevelDestination?>(null)
@@ -149,7 +146,6 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdgeCompat()
         super.onCreate(savedInstanceState)
         clearShareImageCache(this)
-        continuousUsageReminderManager = ContinuousUsageReminderManager(this)
         history = HistoryStorage(this)
         AccountData.loadData(this)
         AndroidThemeSettings.initialize(this)
@@ -217,7 +213,6 @@ class MainActivity : ComponentActivity() {
             }
         }
         if (savedInstanceState == null) {
-            telemetry(this, "start")
             lifecycleScope.launch(Dispatchers.IO) {
                 syncCloudFileIfDue(this@MainActivity)?.onFailure {
                     withContext(Dispatchers.Main) {
@@ -271,16 +266,6 @@ class MainActivity : ComponentActivity() {
                     loader
                 }
             }
-    }
-
-    override fun onStart() {
-        super.onStart()
-        continuousUsageReminderManager.onAppForeground()
-    }
-
-    override fun onStop() {
-        continuousUsageReminderManager.onAppBackground()
-        super.onStop()
     }
 
     private var pageTurnLongPressConsumed = false
@@ -536,11 +521,6 @@ class MainActivity : ComponentActivity() {
         }.getOrNull() ?: runCatching {
             currentEntry?.toRoute<Notification>()
         }.getOrNull()
-    }
-
-    override fun onDestroy() {
-        continuousUsageReminderManager.onDestroy()
-        super.onDestroy()
     }
 
     @Suppress("unused")

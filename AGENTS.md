@@ -127,11 +127,11 @@ Windows 上直接跑全量 `./gradlew ktlintFormat` 会在 `shared-local-db` 的
    魔改尽量集中在少数文件 / 新增文件中，减少与上游的冲突面；合并上游前先确认本地改动已提交。
 2. **分支**：在 `master` 之外开功能分支开发，分支基于最新 `master`，不要混入其他功能分支内容。
 3. **包名 / 品牌**：如需与官方 Zhihu++ 共存安装，修改 `app/build.gradle.kts` 中的 `applicationId`（本 fork 已改为 `com.github.zly2006.zhplus.jev`，应用名「知乎++ Jev」）；`namespace` 和 Kotlin 包名 `com.github.zly2006.zhihu` 不必改，改了会产生大量无意义冲突。
-4. **遥测与在线服务**：上游包含匿名遥测、在线通知、更新检查和 AIGC 投票服务，均指向上游服务器。魔改版若不使用这些服务，应明确关闭或改指向，而不是悄悄保留向上游上报。
+4. **遥测与在线服务**：上游的匿名遥测、首页在线通知、更新检查、AIGC 投票和崩溃上报（均指向上游服务器）已在本 fork 整体删除；合并上游时不要把这些代码带回来。App 现在只连知乎，外加 Jev / Cloudflare（AI 屏蔽）。公式字体 Latin Modern Math（GUST 字体许可，可再分发）打包在 `shared/src/commonMain/composeResources/font/`，原各平台下载器已删除；首页「知乎++新动态 / 投票」公告卡（拉上游作者的知乎想法）也已删除。
 5. **签名**：Release 签名读取环境变量 `signingKey` 等（见 `app/build.gradle.kts` 的 `signingConfigs`），不要把密钥写进仓库。
 6. **提交**：commit / PR 标题以 `feat:` / `fix:` / `refactor:` 开头，正文用中文。`feat` / `fix` 按相对基线的产品变化判定：新增用户可见行为是 `feat`，既有行为回归才是 `fix`。未经用户确认不要 commit 或 push。
 7. **构建产物**：本地生成的 Maven 仓库、jar、klib、APK 等不得提交。
-8. **自用安装包**：给用户手机用的 APK 复制到仓库根目录 `=release/`，命名 `zhihu++jev-v<版本>.apk`（`*.apk` 已被 git 忽略）。从 v1.3 起是 release 构建（R8 压缩，约 6 MB，比 debug 包流畅）：`./gradlew :app:assembleRelease` 得到未签名包，再用 `build-tools/36.0.0` 的 `zipalign -p 4` 和 `apksigner sign --ks C:\Users\Administrator\.android\debug.keystore --ks-key-alias androiddebugkey`（密码 `android`）签名；`apksigner.bat` 会把路径里的 `=` 当分隔符，先输出到别处再复制进 `=release/`。release 包不可调试，`run-as` 读不了数据库，要查数据时临时装 debug 包。v1.0、v1.2 是 debug 构建，同样用这个 keystore 签名，版本号显示为「上游 `app.versionName` + 本 fork 后缀」，后缀在 `app/build.gradle.kts` 的 `versionNameSuffix`（如 `-jev1.6`，显示 `0.31-jev1.6`），发新版时改这里；`gradle.properties` 不动，避免合并冲突。这个 keystore 要妥善保留：换签名后不能覆盖安装。APK 内含 Jev API Key，不要分发。
+8. **自用安装包**：给用户手机用的 APK 复制到仓库根目录 `=release/`，命名 `zhihu++jev-v<版本>.apk`（`*.apk` 已被 git 忽略）。从 v1.3 起是 release 构建（R8 压缩，约 6 MB，比 debug 包流畅）：`./gradlew :app:assembleRelease` 得到未签名包，再用 `build-tools/36.0.0` 的 `zipalign -p 4` 和 `apksigner sign --ks C:\Users\Administrator\.android\debug.keystore --ks-key-alias androiddebugkey`（密码 `android`）签名；`apksigner.bat` 会把路径里的 `=` 当分隔符，先输出到别处再复制进 `=release/`。release 包不可调试，`run-as` 读不了数据库，要查数据时临时装 debug 包。v1.0、v1.2 是 debug 构建，同样用这个 keystore 签名，版本号显示为「上游 `app.versionName` + 本 fork 后缀」，后缀在 `app/build.gradle.kts` 的 `versionNameSuffix`（如 `-jev1.7`，显示 `0.31-jev1.7`），发新版时改这里；`gradle.properties` 不动，避免合并冲突。这个 keystore 要妥善保留：换签名后不能覆盖安装。APK 内含 Jev API Key，不要分发。
 
    | 版本 | 日期 | 内容 |
    | --- | --- | --- |
@@ -141,6 +141,7 @@ Windows 上直接跑全量 `./gradlew ktlintFormat` 会在 `shared-local-db` 的
    | v1.4 | 2026-10-17 | 版本号显示 `0.31-jev1.4`；文章页顶栏随正文同步折叠、去掉松手吸附，折叠时不再每帧重排正文；首页 Web 端推荐每页按发布时间从新到旧（可关）；去掉上游交流群入口，许可证 / issue / 导出页脚链接改指向本 fork |
 | v1.5 | 2026-10-17 | 卡片菜单「屏蔽问题」（按问题 ID，屏蔽列表新增标签页，数据库 v10）；作者备注（作者页「备注」按钮，名字右侧显示）；回答页去掉「XX 人赞同了该回答」、开头的「谢邀 @XX」段落和「收录」徽章；断网时不再反复弹出网络错误，网络恢复后首页自动刷新 |
 | v1.6 | 2026-10-17 | Jev 3 秒无响应或失败时回退到 Cloudflare Workers AI 的 clef-flash；点卡片作者名进入作者主页 |
+| v1.7 | 2026-10-17 | 删除所有连上游服务器的功能（遥测、在线通知、更新检查、AIGC 标记、崩溃上报、首页「知乎++新动态」）和防沉迷；公式字体打包进 APK，App 只连知乎和 Jev / Cloudflare；护眼配色（米白背景、降低文字反差）；卡片菜单去掉「屏蔽提问者」；屏蔽用户后只移除该作者卡片不整页刷新 |
 
 ## 上游规则的取舍
 
@@ -204,15 +205,15 @@ $ADB shell svc wifi disable; $ADB shell svc data disable   # 模拟断网，测�
 - 精确屏蔽词新增匹配范围（全部 / 仅标题 / 仅作者名），数据库升到 v8。
 - **Jev 版**：删除 full / lite flavor、`sentence_embeddings`、`rs-hf-tokenizer`、HanLP 与 text2vec 模型下载；`app/src/main/.../nlp/Jev.kt` 用 TypeSafe Jev 的 noul 判断题实现 AI 主题屏蔽和「按关键词屏蔽」的关键词挑选（候选词由系统 ICU 分词生成）。原 full 专属的提椠 Markdown 渲染器和日报日期选择器保留。
 - applicationId 改为 `com.github.zly2006.zhplus.jev`，应用名「知乎++ Jev」，可与官方版共存。
-- 关闭更新检查（上游 release 不含 Jev 版）：去掉启动时自动检查、设置页的检查更新按钮、Nightly 开关和 GitHub Token 项；`updater/` 代码仍在但不再被触发。
+- 删除更新检查：`updater/` 包、`UpdateManager`、各平台 `SystemUpdate*` 能力、首页「发现新版本」卡片和 `REQUEST_INSTALL_PACKAGES` 权限。
 - 离线阅读：`fetchZhihuContentDetail` 把联网时下载的回答 / 文章 / 问题 / 想法详情原始 JSON 存进 `offline_contents` 表（数据库 v9，保留 7 天、最多 2000 条），请求失败时回退到本地版本；首页加载失败且为空时列出离线保存的回答和文章（按当前屏蔽设置过滤）；保存正文时在不按流量计费的网络下用 Coil 预下载其中图片，磁盘缓存调到 300 MB；首页（网页 / 安卓 / 混合模式）每次刷新连续加载 2 页（`pagesPerRefresh`）。
 - 已读标记：`FeedCard` 用 `content_open_events`（本地打开 + 同步的知乎浏览历史）在详情行前显示「3 天前读过」。
 - 屏蔽入口：账号页新增「屏蔽列表」直达入口；首页卡片「按关键词屏蔽」弹窗支持手动输入，可选「普通屏蔽词」（带匹配范围，每个词一条规则）或「AI 主题（Jev）」，点「Jev 建议」才请求 Jev 提取关键词，结果只作为可点选的建议（默认不选），弹窗底部可跳到屏蔽列表；屏蔽列表的 NLP 标签页改名「AI 屏蔽主题」。
 - 数据同步：`shared/src/androidMain/.../ui/subscreens/AndroidSubscreenRuntimes.kt` 的 `CloudFileSyncSettings`（设置 → 系统与更新）。用 SAF 选一个文件，写入两个 SharedPreferences、`account.json`、`history.json` 和两个 Room 数据库的全部表（排除离线正文和本地推荐的爬虫缓存三表）；同步 = 本机与文件合并后写回文件（冲突以本机为准），恢复 = 文件合并进本机（冲突以文件为准）后重启应用。`MainActivity` 启动时距上次成功同步超过一天会自动同步（`syncCloudFileIfDue`）。系统自动备份配置保持上游原样，曾经的 `ConfigBackupAgent` 已删除。
-- 版本号加后缀 `-jev<版本>`（当前 `-jev1.6`）；去掉设置页「交流 & 闲聊」（上游 Discord / Telegram / issue）；许可证链接、实验性 UI 页脚的 issue 链接、文章导出页脚的 GitHub 地址改指向本 fork（导出署名改为「知乎++ Jev」）。
+- 版本号加后缀 `-jev<版本>`（当前 `-jev1.7`）；去掉设置页「交流 & 闲聊」（上游 Discord / Telegram / issue）；许可证链接、实验性 UI 页脚的 issue 链接、文章导出页脚的 GitHub 地址改指向本 fork（导出署名改为「知乎++ Jev」）。
 - 文章页顶栏：`TwoRowsTopAppBar.kt` 的 `rememberContentLinkedScrollBehavior` 让折叠量等于正文滚动距离（不先消费滚动、不吸附），`ArticleScreen` 正文顶部边距固定为展开高度，顶栏覆盖在正文上折叠；原 `PreferCollapsedExitUntilCollapsedScrollBehavior` 与吸附代码已删除。很短的回答可能收不完顶栏。
 - 首页排序：设置「推荐系统与内容过滤 → 按发布时间排序」（`homeFeedSortByPublishTime`，默认开），`HomeFeedViewModel.processResponse` 把每页按 `target.created_time` 从新到旧重排（外层 `created_time` 是请求时刻，不能用）。安卓端推荐卡片实测不带任何时间字段，所以安卓端推荐不受影响、混合推荐只排网页端那部分。
-- 遥测 `allowTelemetry` 默认值改为 false（`Utils.kt` 与设置页两处）。
+- 删除遥测（`telemetry()`、登录前第三页遥测声明、设置项）、首页在线通知（`OnlineHomeNotification`）、AIGC 标记（`AigcVoteModels`、`AigcVoteEnvironment`、文章页标记面板与菜单项、设置项）、未接入的 `CrashReporter`、防沉迷提醒（`ContinuousUsageReminderManager` 与设置项；原 `ZhihuPolicy.kt` 只剩 `expect object Log`，改名 `Log.kt`）。
 - 界面精简：回答 / 文章不注入段评划线（`ArticleViewModel` 直接用原文，上游段评代码保留未调用）；回答页底部操作栏加 surface 底色；首页去掉创作「+」按钮（`SHOW_HOME_CREATE_FAB`）；Android 推荐卡片去掉「手机版推荐」来源标签；卡片菜单的话题改为可展开的「屏蔽话题（N）」（`BlockTopicMenuItems`，首页和关注页共用）；默认值改为：刷新浮动按钮关、「下一个回答」按钮关、回答页底栏自动隐藏开；账号页「关于」改为知乎++ Jev 和本 fork 地址。
 - 质量屏蔽：默认模式由「屏蔽规则」（留「已屏蔽」占位卡）改为「隐藏」；「隐藏」原先只在首页 `HomeFeedViewModel` 生效，现在 `BaseFeedViewModel.processResponse` 也会去掉占位，关注、热榜、搜索、问题回答列表等都不再留占位（`QualityFilterModeTest` 覆盖）。
 - 性能：卡片的「读过」标签不再每张卡各查一次数据库，`ContentOpenEventSupport.lastOpenedAt` 首次用到时整表读入（`getLastOpenedTimes`），之后随打开记录和远端历史同步增量更新；`parseEmphasizedHtmlTextWithTheme` 用 `remember` 缓存解析结果。
@@ -223,6 +224,8 @@ $ADB shell svc wifi disable; $ADB shell svc data disable   # 模拟断网，测�
 - 断网处理：`PaginationViewModel.networkUnavailable`，域名解析失败（`isHostResolutionFailure`）后只提示一次「网络不可用」，不再自动加载下一页（原来列表底部每 50ms 重试、不停弹错误）；`MainActivity` 监听系统网络，恢复且验证可上网时发 `networkReconnected`，离线状态的首页自动刷新。
 - Jev 回退：`Jev.kt` 的 `askJev` 给 Jev 请求 3 秒超时（正常 0.3～0.6 秒），超时或失败时用同样的 noul 请求体（model 改为 `clef-flash`）调用 Cloudflare 官方 API `api.cloudflare.com/client/v4/accounts/<id>/ai/run/@cf/cloudflare/clef-flash`（workers.dev 在国内被墙，响应包在 `result` 里）；两个凭据都没有时 NLP 设置页才显示警告。
 - 卡片作者名：`FeedCard` 作者行原来挂着空的 `clickable {}` 吞掉点击，改为跳转 `Person`；安卓推荐卡片在详情加载前没有作者 ID，此时点作者名等同点卡片。
+- 护眼配色：默认背景浅色 `#F6F4EF`、深色 `#1A1A1C`（`ThemeManager.DEFAULT_BACKGROUND_*`，用户选过的保留）；`ZhihuTheme` 把正文文字向背景靠 12%、次要文字 6%、各级容器色 50%。
+- 卡片菜单去掉「屏蔽提问者」（屏蔽列表和作者页「屏蔽其提问」仍在）；屏蔽用户确认后调用 `BaseFeedViewModel.removeItemsByAuthor` 只移除该作者卡片，不再整页刷新。
 - 上游 CI（`.github/workflows`）仍按 full / lite 构建并发布到上游 release，本 fork 未改，不要直接启用。
 
 ## 已知问题与待办

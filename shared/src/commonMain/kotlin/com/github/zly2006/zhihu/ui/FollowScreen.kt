@@ -73,8 +73,6 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
 import com.github.zly2006.zhihu.data.DataHolder
-import com.github.zly2006.zhihu.data.Feed
-import com.github.zly2006.zhihu.data.target
 import com.github.zly2006.zhihu.navigation.LocalNavigator
 import com.github.zly2006.zhihu.navigation.Person
 import com.github.zly2006.zhihu.platform.UserMessageDuration
@@ -431,25 +429,6 @@ fun FollowRecommendScreen(
                                 }
                             },
                         )
-                        val canBlockQuestionAuthor = when (item.feed?.target) {
-                            is Feed.AnswerTarget, is Feed.QuestionTarget -> true
-                            else -> item.raw is DataHolder.Answer || item.raw is DataHolder.Question
-                        }
-                        if (canBlockQuestionAuthor) {
-                            DropdownMenuItem(
-                                text = { Text("屏蔽提问者") },
-                                onClick = {
-                                    dismissMenu()
-                                    viewModel.handleBlockQuestionAuthor(environment, userMessages, item) { authorInfo ->
-                                        feedAuthorBlockRequest = FeedAuthorBlockRequest(
-                                            FeedAuthorBlockType.QUESTION_AUTHOR,
-                                            authorInfo.first,
-                                            authorInfo.second,
-                                        )
-                                    }
-                                },
-                            )
-                        }
                         item.blockableQuestion()?.let { (questionId, questionTitle) ->
                             DropdownMenuItem(
                                 text = { Text("屏蔽问题") },
@@ -495,7 +474,7 @@ fun FollowRecommendScreen(
             displayItems = viewModel.displayItems,
             onDismiss = { feedAuthorBlockRequest = null },
             onConfirm = {
-                viewModel.refresh(environment)
+                feedAuthorBlockRequest?.let { viewModel.removeItemsByAuthor(it.userId, it.userName) }
                 feedAuthorBlockRequest = null
             },
         )
@@ -590,25 +569,6 @@ fun FollowDynamicScreen(
                                 }
                             },
                         )
-                        val canBlockQuestionAuthor = when (item.feed?.target) {
-                            is Feed.AnswerTarget, is Feed.QuestionTarget -> true
-                            else -> item.raw is DataHolder.Answer || item.raw is DataHolder.Question
-                        }
-                        if (canBlockQuestionAuthor) {
-                            DropdownMenuItem(
-                                text = { Text("屏蔽提问者") },
-                                onClick = {
-                                    dismissMenu()
-                                    viewModel.handleBlockQuestionAuthor(environment, userMessages, item) { authorInfo ->
-                                        feedAuthorBlockRequest = FeedAuthorBlockRequest(
-                                            FeedAuthorBlockType.QUESTION_AUTHOR,
-                                            authorInfo.first,
-                                            authorInfo.second,
-                                        )
-                                    }
-                                },
-                            )
-                        }
                         item.blockableQuestion()?.let { (questionId, questionTitle) ->
                             DropdownMenuItem(
                                 text = { Text("屏蔽问题") },
@@ -654,7 +614,7 @@ fun FollowDynamicScreen(
             displayItems = viewModel.displayItems,
             onDismiss = { feedAuthorBlockRequest = null },
             onConfirm = {
-                viewModel.refresh(environment)
+                feedAuthorBlockRequest?.let { viewModel.removeItemsByAuthor(it.userId, it.userName) }
                 feedAuthorBlockRequest = null
             },
         )

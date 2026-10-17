@@ -78,10 +78,13 @@ import com.github.zly2006.zhihu.ui.subscreens.DUO3_TIQIAN_MATH_FONT_PREFERENCE_K
 import com.github.zly2006.zhihu.ui.subscreens.PREF_BLOCK_SPACING
 import com.github.zly2006.zhihu.ui.subscreens.PREF_FONT_SIZE
 import com.github.zly2006.zhihu.ui.subscreens.PREF_LINE_HEIGHT
+import com.hrm.latex.renderer.font.MathFont
 import com.hrm.markdown.parser.ast.Document
 import com.hrm.markdown.renderer.Markdown
 import com.hrm.markdown.renderer.MarkdownImageData
 import com.hrm.markdown.renderer.MarkdownTheme
+import zhihu.shared.generated.resources.Res
+import zhihu.shared.generated.resources.latinmodern_math
 
 @Composable
 fun RenderImage(
@@ -356,7 +359,8 @@ private fun RenderMarkdownDocument(
                             footer = footer,
                         )
                     } else {
-                        val mathFont = rememberMarkdownMathFont()
+                        // Latin Modern Math 随 APK 打包，不再从 CTAN 镜像下载
+                        val mathFont = remember { MathFont.OTF(Res.font.latinmodern_math) }
                         val defaultTheme = MarkdownTheme.material3()
                         val scaledFontSize = 16.sp * fontSize / 100
                         val theme = defaultTheme.copy(
@@ -366,7 +370,7 @@ private fun RenderMarkdownDocument(
                             ),
                             blockSpacing = defaultTheme.blockSpacing * (blockSpacing / 100f),
                             mathFontSize = 18f * fontSize / 100,
-                            mathFont = mathFont ?: defaultTheme.mathFont,
+                            mathFont = mathFont,
                         )
                         Markdown(
                             document = document,

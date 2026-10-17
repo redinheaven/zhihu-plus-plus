@@ -23,6 +23,7 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import com.materialkolor.dynamicColorScheme
 
 private val DarkColorScheme = darkColorScheme(
@@ -66,9 +67,20 @@ fun ZhihuTheme(
         else -> LightColorScheme
     }
 
+    // 缓解视觉疲劳：文字向背景靠一点、降低反差；卡片等容器色向背景靠一半，既保留层次又不在米白背景上出现发冷的亮块
+    fun Color.soften(fraction: Float) = lerp(this, customBackgroundColor, fraction)
     val colorScheme = baseColorScheme.copy(
         background = customBackgroundColor,
         surface = customBackgroundColor,
+        onBackground = baseColorScheme.onBackground.soften(0.12f),
+        onSurface = baseColorScheme.onSurface.soften(0.12f),
+        onSurfaceVariant = baseColorScheme.onSurfaceVariant.soften(0.06f),
+        surfaceBright = baseColorScheme.surfaceBright.soften(0.5f),
+        surfaceContainerLowest = baseColorScheme.surfaceContainerLowest.soften(0.5f),
+        surfaceContainerLow = baseColorScheme.surfaceContainerLow.soften(0.5f),
+        surfaceContainer = baseColorScheme.surfaceContainer.soften(0.5f),
+        surfaceContainerHigh = baseColorScheme.surfaceContainerHigh.soften(0.5f),
+        surfaceContainerHighest = baseColorScheme.surfaceContainerHighest.soften(0.5f),
     )
 
     PlatformSystemBarEffect(darkTheme)

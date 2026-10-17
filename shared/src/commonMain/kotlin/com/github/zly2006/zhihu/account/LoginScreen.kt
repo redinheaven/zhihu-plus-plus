@@ -64,7 +64,6 @@ expect fun WebLoginPane(onLoginSuccess: (String) -> Unit)
 @Composable
 fun LoginScreen(
     onLoginComplete: () -> Unit,
-    onOpenTelemetrySettings: () -> Unit,
 ) {
     val openExternalUrl = rememberExternalUrlOpener()
     var noticeStep by rememberSaveable {
@@ -85,8 +84,7 @@ fun LoginScreen(
             onSecondaryAction = {
                 when (noticeStep) {
                     0 -> openExternalUrl("https://www.zhihu.com/app/")
-                    1 -> openExternalUrl("https://www.zhihu.com/term/zhihu-terms")
-                    else -> onOpenTelemetrySettings()
+                    else -> openExternalUrl("https://www.zhihu.com/term/zhihu-terms")
                 }
             },
             onConfirm = { noticeStep++ },
@@ -228,7 +226,7 @@ private data class LoginNotice(
     val secondaryButtonText: String,
 )
 
-private const val LOGIN_NOTICE_COUNT = 3
+private const val LOGIN_NOTICE_COUNT = 2
 
 private val loginNotices = listOf(
     LoginNotice(
@@ -238,9 +236,5 @@ private val loginNotices = listOf(
     LoginNotice(
         message = "在使用本应用的过程中，我承诺遵守知乎使用协议 https://www.zhihu.com/term/zhihu-terms 。我保证在使用过程中不侵犯知乎及其他作者的著作权，使用本应用产生的一切输出仅用于个人浏览和备份，不会进行传播等其他影响作者著作权的行为。",
         secondaryButtonText = "查看协议",
-    ),
-    LoginNotice(
-        message = "我知晓，本应用可能会收集部分匿名化的使用信息来确定使用人数，我可以在设置中随时关闭此项遥测。",
-        secondaryButtonText = "查看设置",
     ),
 )

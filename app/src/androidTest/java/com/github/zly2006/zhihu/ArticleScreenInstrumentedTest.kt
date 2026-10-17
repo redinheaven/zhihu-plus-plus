@@ -1628,7 +1628,6 @@ class ArticleScreenInstrumentedTest {
                     showMenu = true,
                     onDismissRequest = {},
                     onSummaryRequest = {},
-                    onAigcFlagRequest = {},
                     onExportRequest = {},
                 )
             }

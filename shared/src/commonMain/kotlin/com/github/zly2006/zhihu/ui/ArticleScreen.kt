@@ -122,7 +122,6 @@ import com.github.zly2006.zhihu.platform.isArticleImageExportSupported
 import com.github.zly2006.zhihu.platform.rememberSettingsStore
 import com.github.zly2006.zhihu.platform.rememberUserMessageSink
 import com.github.zly2006.zhihu.ui.AnswerDoubleTapAction
-import com.github.zly2006.zhihu.ui.article.AigcFlagSheet
 import com.github.zly2006.zhihu.ui.article.ArticleActionsMenu
 import com.github.zly2006.zhihu.ui.article.ArticleSummarySheet
 import com.github.zly2006.zhihu.ui.article.ArticleVideoAttachmentContent
@@ -260,7 +259,6 @@ fun ArticleScreen(
     var showCollectionDialog by remember { mutableStateOf(false) }
     var showActionsMenu by remember { mutableStateOf(false) }
     var showSummaryDialog by remember { mutableStateOf(false) }
-    var showAigcFlagSheet by remember { mutableStateOf(false) }
     var showExportDialog by remember { mutableStateOf(false) }
     var showDoubleTapActionDialog by remember { mutableStateOf(false) }
     var showVoters by rememberSaveable(article.type, article.id) { mutableStateOf(false) }
@@ -299,7 +297,6 @@ fun ArticleScreen(
         !showCollectionDialog &&
         !showActionsMenu &&
         !showSummaryDialog &&
-        !showAigcFlagSheet &&
         !showExportDialog &&
         !showDoubleTapActionDialog &&
         !showVoters
@@ -387,9 +384,6 @@ fun ArticleScreen(
 
     LaunchedEffect(scrollState) {
         snapshotFlow { scrollState.value }.collectLatest { currentScroll ->
-            viewModel.updateAigcReadProgress(currentScroll, effectiveScrollMaxValue)
-            viewModel.syncAigcReadEventIfEligible(environment)
-
             if (viewModel.rememberedScrollYSync) {
                 viewModel.rememberedScrollY = currentScroll
             }
@@ -406,23 +400,6 @@ fun ArticleScreen(
         answerNavigationState.prepareArticle()
         viewModel.loadArticle(environment)
         viewModel.loadCollections(environment)
-        viewModel.loadAigcFlagStatus(environment)
-    }
-
-    LaunchedEffect(article.type, article.id, viewModel.content) {
-        if (viewModel.content.isNotBlank()) {
-            viewModel.updateAigcReadProgress(scrollState.value, latestEffectiveScrollMaxValue)
-            delay(15_000)
-            viewModel.updateAigcReadProgress(scrollState.value, latestEffectiveScrollMaxValue)
-            viewModel.syncAigcReadEventIfEligible(environment)
-        }
-    }
-    LaunchedEffect(scrollState, viewModel.content) {
-        snapshotFlow { effectiveScrollMaxValue }.collectLatest { maxValue ->
-            if (viewModel.content.isNotBlank()) {
-                viewModel.updateAigcReadProgress(scrollState.value, maxValue)
-            }
-        }
     }
 
     @OptIn(ExperimentalMaterial3Api::class)
@@ -959,22 +936,6 @@ fun ArticleScreen(
                             }
                         }
 
-                        @Composable
-                        fun ColumnScope.ArticleVotersSocialCredit() {
-                            val contentLabel = when (article.type) {
-                                ArticleType.Answer -> "回答"
-                                ArticleType.Article -> "文章"
-                            }
-                            // 本 fork 不显示「XX 人赞同了该回答」，只保留 AIGC 提示
-                            if (viewModel.aigcSupportVoterCount <= 0) return
-                            Spacer(modifier = Modifier.height(8.dp))
-                            Text(
-                                text = "有 ${formatCompactCount(viewModel.aigcSupportVoterCount)} 人认为此${contentLabel}包含AIGC内容",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.error,
-                            )
-                        }
-
                         if (viewModel.content.isNotEmpty() || viewModel.attachment != null) {
                             if (article.type == ArticleType.Article && viewModel.topics.isNotEmpty()) {
                                 FlowRow(
@@ -992,10 +953,9 @@ fun ArticleScreen(
                                 Spacer(Modifier.height(12.dp))
                             }
                             val hasPinnedDate = pinAnswerDate
-                            val hasSocialCredit = viewModel.aigcSupportVoterCount > 0
                             val endorsements = viewModel.endorsements
                             val hasEndorsements = endorsements.isNotEmpty()
-                            if (hasPinnedDate || hasSocialCredit || hasEndorsements) {
+                            if (hasPinnedDate || hasEndorsements) {
                                 Column(
                                     modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                                     horizontalAlignment = Alignment.Start,
@@ -1003,9 +963,8 @@ fun ArticleScreen(
                                     if (hasPinnedDate) {
                                         DateTexts()
                                     }
-                                    ArticleVotersSocialCredit()
                                     if (hasEndorsements) {
-                                        if (hasPinnedDate || hasSocialCredit) {
+                                        if (hasPinnedDate) {
                                             Spacer(modifier = Modifier.height(8.dp))
                                         }
                                         FlowRow(
@@ -1222,10 +1181,6 @@ fun ArticleScreen(
             showSummaryDialog = true
             viewModel.requestAiSummary(environment)
         },
-        onAigcFlagRequest = {
-            showAigcFlagSheet = true
-            viewModel.loadAigcFlagStatus(environment)
-        },
         onExportRequest = { showExportDialog = true },
         onSetImmersiveDoubleTap = {
             showActionsMenu = false
@@ -1257,13 +1212,6 @@ fun ArticleScreen(
     PlatformBackHandler(showActionsMenu) {
         showActionsMenu = false
     }
-
-    AigcFlagSheet(
-        showDialog = showAigcFlagSheet,
-        viewModel = viewModel,
-        onDismissRequest = { showAigcFlagSheet = false },
-        onSubmitRequest = { viewModel.submitAigcFlag(environment) },
-    )
 
     // 使用新的收藏夹对话框组件
     CollectionDialogComponent(

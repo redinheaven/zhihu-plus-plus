@@ -33,7 +33,6 @@ import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.FilterCenterFocus
-import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.GetApp
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.outlined.DesktopWindows
@@ -117,7 +116,6 @@ fun ArticleActionsMenu(
     showMenu: Boolean,
     onDismissRequest: () -> Unit,
     onSummaryRequest: () -> Unit,
-    onAigcFlagRequest: () -> Unit,
     onExportRequest: () -> Unit,
     onSetImmersiveDoubleTap: () -> Unit = {},
 ) {
@@ -361,16 +359,6 @@ fun ArticleActionsMenu(
             onClick = {
                 onDismissRequest()
                 onSummaryRequest()
-            },
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
-        MenuActionButton(
-            icon = Icons.Filled.Flag,
-            text = "标记疑似 AIGC",
-            onClick = {
-                onDismissRequest()
-                onAigcFlagRequest()
             },
         )
 

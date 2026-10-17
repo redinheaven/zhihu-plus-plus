@@ -65,11 +65,9 @@ import com.github.zly2006.zhihu.account.rememberZhihuAccountStore
 import com.github.zly2006.zhihu.data.ZHIHU_ME_URL
 import com.github.zly2006.zhihu.navigation.Account
 import com.github.zly2006.zhihu.navigation.LocalNavigator
-import com.github.zly2006.zhihu.notification.HOME_NOTIFICATION_READ_UUIDS_PREFERENCE_KEY
 import com.github.zly2006.zhihu.platform.rememberPlainTextClipboard
 import com.github.zly2006.zhihu.platform.rememberSettingsStore
 import com.github.zly2006.zhihu.platform.rememberUserMessageSink
-import com.github.zly2006.zhihu.ui.HOME_PIN_ANNOUNCEMENT_READ_KEY_PREFIX
 import com.github.zly2006.zhihu.ui.TtsState
 import com.github.zly2006.zhihu.ui.components.SettingItemOverall
 import com.github.zly2006.zhihu.ui.components.pageTurnViewportWithGuide
@@ -84,7 +82,7 @@ const val DEVELOPER_SETTINGS_COLOR_SCHEME_TAG = "developerSettings/colorScheme"
 /**
  * 开发者选项页。
  *
- * 页面用于展示网络、电源、连续使用时长、TTS 引擎等诊断信息，并提供验证登录、刷新 Token、手动 Cookie、签名请求、
+ * 页面用于展示网络、电源、TTS 引擎等诊断信息，并提供验证登录、刷新 Token、手动 Cookie、签名请求、
  * 句子相似度和配色查看器等调试入口。关闭开发者模式会立即返回上一页，因此新增调试项应避免依赖页面长期驻留。
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
@@ -161,7 +159,6 @@ fun DeveloperSettingsScreen() {
                 Column {
                     Text(runtimeInfo.networkStatus)
                     runtimeInfo.powerSaveModeText?.let { Text(it) }
-                    Text("连续使用时长：${formatContinuousUsageDuration(runtimeInfo.continuousUsageDurationMs)}")
 
                     Spacer(Modifier.height(16.dp))
                 }
@@ -194,12 +191,6 @@ fun DeveloperSettingsScreen() {
                         navigator.onNavigate(Account.DeveloperSettings.ColorScheme)
                     },
                 ) { Text("Color Scheme") }
-
-                Button(onClick = {
-                    settings.remove(HOME_NOTIFICATION_READ_UUIDS_PREFERENCE_KEY)
-                    settings.removeByPrefix(HOME_PIN_ANNOUNCEMENT_READ_KEY_PREFIX)
-                    userMessages.showShortMessage("已清除 online notification 和作者想法推送的已读记录")
-                }) { Text("清除所有 online notification 和作者想法推送已读记录") }
             }
 
             // TTS引擎信息显示
@@ -471,18 +462,5 @@ fun DeveloperSettingsScreen() {
                 }
             },
         )
-    }
-}
-
-private fun formatContinuousUsageDuration(durationMs: Long): String {
-    val safeDurationMs = durationMs.coerceAtLeast(0L)
-    val totalSeconds = safeDurationMs / 1_000L
-    val hours = totalSeconds / 3_600L
-    val minutes = (totalSeconds % 3_600L) / 60L
-    val seconds = totalSeconds % 60L
-    return when {
-        hours > 0 -> "${hours}小时${minutes}分${seconds}秒"
-        minutes > 0 -> "${minutes}分${seconds}秒"
-        else -> "${seconds}秒"
     }
 }

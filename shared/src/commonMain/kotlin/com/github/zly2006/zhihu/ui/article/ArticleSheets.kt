@@ -29,7 +29,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
@@ -39,10 +38,8 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.github.zly2006.zhihu.ui.components.MyModalBottomSheet
-import com.github.zly2006.zhihu.viewmodel.ArticleViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -97,116 +94,6 @@ internal fun ArticleSummarySheet(
                 Spacer(modifier = Modifier.width(8.dp))
                 if (!loading) {
                     TextButton(onClick = onRetryRequest) { Text("重新总结") }
-                }
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-internal fun AigcFlagSheet(
-    showDialog: Boolean,
-    viewModel: ArticleViewModel,
-    onDismissRequest: () -> Unit,
-    onSubmitRequest: () -> Unit,
-) {
-    if (!showDialog) return
-    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    MyModalBottomSheet(
-        onDismissRequest = onDismissRequest,
-        sheetState = sheetState,
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            val canSubmitAigcFlag = viewModel.aigcVoteAvailable &&
-                !viewModel.aigcVoteLoading &&
-                !viewModel.aigcFlagged &&
-                viewModel.aigcVoterName.isNotBlank() &&
-                (
-                    viewModel.aigcCreditBypassAvailable ||
-                        (viewModel.aigcVoteCredit > 0 && viewModel.isAigcFlagEvidenceReady())
-                )
-            Text(
-                text = "标记疑似 AIGC",
-                style = MaterialTheme.typography.headlineSmall,
-                fontWeight = FontWeight.Bold,
-            )
-            Text(
-                text = "每浏览 20 篇内容获得 1 点投票积分，最多保留 ${viewModel.aigcVoteCap} 点。标记会上传当前正文 HTML、编辑时间和投票人身份，服务端按内容版本统计。",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                text = if (!viewModel.aigcVoteAvailable) {
-                    "AIGC 标记未启用"
-                } else if (viewModel.aigcVoterName.isBlank()) {
-                    "未登录，无法记名投票"
-                } else {
-                    "投票人：${viewModel.aigcVoterName}"
-                },
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Text(
-                text = if (viewModel.aigcCreditBypassAvailable) {
-                    "积分 ${viewModel.aigcVoteCredit}/${viewModel.aigcVoteCap} · 当前账号可免积分标记"
-                } else {
-                    "积分 ${viewModel.aigcVoteCredit}/${viewModel.aigcVoteCap} · 进度 ${viewModel.aigcVoteProgress}/20"
-                },
-                style = MaterialTheme.typography.titleMedium,
-            )
-            Text(
-                text = if (viewModel.aigcEffectiveFlagCount > 0) {
-                    "已有 ${viewModel.aigcEffectiveFlagCount} 个有效标记"
-                } else {
-                    "当前还没有有效标记"
-                },
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            if (viewModel.aigcNamedVoters.isNotEmpty()) {
-                Text(
-                    text = "记名投票：" + viewModel.aigcNamedVoters.joinToString("、") { voter ->
-                        if (voter.creditBypassed) "${voter.voterName}（免积分）" else voter.voterName
-                    },
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            viewModel.aigcVoteError?.let { error ->
-                Text(
-                    text = error,
-                    color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            }
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                TextButton(onClick = onDismissRequest) { Text("关闭") }
-                Spacer(modifier = Modifier.width(8.dp))
-                Button(
-                    onClick = onSubmitRequest,
-                    enabled = canSubmitAigcFlag,
-                ) {
-                    Text(
-                        when {
-                            !viewModel.aigcVoteAvailable -> "未启用"
-                            viewModel.aigcFlagged -> "已标记"
-                            viewModel.aigcVoteLoading -> "提交中"
-                            viewModel.aigcVoterName.isBlank() -> "需登录"
-                            viewModel.aigcCreditBypassAvailable -> "免积分标记"
-                            viewModel.aigcVoteCredit <= 0 -> "积分不足"
-                            !viewModel.isAigcFlagEvidenceReady() -> "继续阅读"
-                            else -> "消耗 1 点标记"
-                        },
-                    )
                 }
             }
         }

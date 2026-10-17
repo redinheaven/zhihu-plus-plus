@@ -33,8 +33,6 @@ internal actual val nativeIsDesktop: Boolean = false
 
 actual val platformName: String = "iOS"
 
-actual val isAigcVoteSupported: Boolean = false
-
 @Composable
 @OptIn(ExperimentalForeignApi::class)
 actual fun rememberExternalUrlOpener(): ExternalUrlOpener = remember {

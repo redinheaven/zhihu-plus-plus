@@ -66,9 +66,6 @@ import com.github.zly2006.zhihu.reading.AndroidReadingPlayerBridge
 import com.github.zly2006.zhihu.ui.PREFERENCE_NAME
 import com.github.zly2006.zhihu.ui.components.SettingItem
 import com.github.zly2006.zhihu.ui.rememberArticleTtsState
-import com.github.zly2006.zhihu.updater.UpdateManager
-import com.github.zly2006.zhihu.updater.UpdateManager.UpdateState
-import com.github.zly2006.zhihu.util.ContinuousUsageReminderManager
 import com.github.zly2006.zhihu.util.PowerSaveModeCompat
 import com.github.zly2006.zhihu.viewmodel.filter.OfflineContent
 import com.github.zly2006.zhihu.viewmodel.filter.getContentFilterDatabase
@@ -77,10 +74,6 @@ import com.mikepenz.aboutlibraries.Libs
 import com.mikepenz.aboutlibraries.util.withContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.map
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -123,7 +116,6 @@ actual fun rememberDeveloperInfo(): DeveloperInfoSnapshot {
                         PowerSaveModeCompat.HUAWEI_POWER_SAVE -> "省电模式：华为傻逼模式已开启"
                         else -> null
                     },
-                continuousUsageDurationMs = ContinuousUsageReminderManager.currentElapsedForegroundMs(),
                 ttsState = ttsState,
                 currentTtsEngineLabel = readingState.engineLabel.ifBlank { "按需初始化" },
                 availableTtsEngineLabels = readingState.availableEngineLabels,
@@ -205,92 +197,6 @@ actual fun WebViewCustomFontSettings(
             }
         }
     }
-}
-
-@Composable
-actual fun rememberSystemUpdateState(): StateFlow<SystemUpdateState> {
-    val scope = rememberCoroutineScope()
-    return remember(scope) {
-        UpdateManager.updateState.map { it.toSystemUpdateState() }.stateIn(
-            scope,
-            SharingStarted.Eagerly,
-            UpdateManager.updateState.value.toSystemUpdateState(),
-        )
-    }
-}
-
-@Composable
-actual fun rememberSystemUpdateChecker(): SystemUpdateChecker {
-    val context = LocalContext.current
-    return remember(context) {
-        object : SystemUpdateChecker {
-            override suspend fun check() = UpdateManager.checkForUpdate(context)
-        }
-    }
-}
-
-@Composable
-actual fun rememberSystemUpdateVersionSkipper(): SystemUpdateVersionSkipper {
-    val context = LocalContext.current
-    return remember(context) {
-        object : SystemUpdateVersionSkipper {
-            override fun skip(version: String) {
-                UpdateManager.skipVersion(context, version)
-                UpdateManager.updateState.value = UpdateState.Latest
-            }
-        }
-    }
-}
-
-@Composable
-actual fun rememberSystemUpdateDownloader(): SystemUpdateDownloader {
-    val context = LocalContext.current
-    return remember(context) {
-        object : SystemUpdateDownloader {
-            override suspend fun download(url: String) = UpdateManager.downloadUpdate(context, url)
-        }
-    }
-}
-
-@Composable
-actual fun rememberDownloadedSystemUpdateInstaller(): DownloadedSystemUpdateInstaller {
-    val context = LocalContext.current
-    return remember(context) {
-        object : DownloadedSystemUpdateInstaller {
-            override suspend fun install() {
-                val state = UpdateManager.updateState.value
-                if (state is UpdateState.Downloaded) {
-                    UpdateManager.installUpdate(context, state.file)
-                }
-            }
-        }
-    }
-}
-
-actual fun resetSystemUpdateState() {
-    UpdateManager.updateState.value = UpdateState.NoUpdate
-}
-
-actual fun setSystemUpdateError(message: String) {
-    UpdateManager.updateState.value = UpdateState.Error(message)
-}
-
-actual val isApkUpdateInstallSupported: Boolean = true
-
-private fun UpdateState.toSystemUpdateState(): SystemUpdateState = when (this) {
-    UpdateState.NoUpdate -> SystemUpdateState.NoUpdate
-    UpdateState.Checking -> SystemUpdateState.Checking
-    UpdateState.Latest -> SystemUpdateState.Latest
-    is UpdateState.UpdateAvailable -> SystemUpdateState.UpdateAvailable(
-        version = version.toString(),
-        isNightly = isNightly,
-        releaseNotes = releaseNotes,
-        downloadUrl = downloadUrl,
-        cnDownloadUrl = cnDownloadUrl,
-    )
-    UpdateState.Downloading -> SystemUpdateState.Downloading
-    is UpdateState.Downloaded -> SystemUpdateState.Downloaded
-    is UpdateState.Error -> SystemUpdateState.Error(message)
 }
 
 @Composable

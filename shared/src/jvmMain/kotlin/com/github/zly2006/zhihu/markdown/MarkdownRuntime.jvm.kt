@@ -18,43 +18,12 @@
 package com.github.zly2006.zhihu.markdown
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.text.ExperimentalTextApi
-import androidx.compose.ui.text.platform.asComposeFontFamily
-import com.github.zly2006.zhihu.account.ZhihuAccountStore
 import com.github.zly2006.zhihu.data.toCookieHeaderString
 import com.github.zly2006.zhihu.desktop.defaultDesktopAccountStore
-import com.github.zly2006.zhihu.desktop.desktopZhihuDataFile
-import com.hrm.latex.renderer.font.MathFont
-import io.ktor.client.call.body
 import io.ktor.client.request.get
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
-import java.io.File
-
-private const val FONT_VERSION = "1"
-private val LM_MATH_URLS = listOf(
-    "https://mirrors.ustc.edu.cn/CTAN/fonts/lm-math/opentype/latinmodern-math.otf",
-    "https://mirrors.tuna.tsinghua.edu.cn/CTAN/fonts/lm-math/opentype/latinmodern-math.otf",
-)
-
-@Composable
-actual fun rememberMarkdownMathFont(): MathFont? {
-    val store = defaultDesktopAccountStore
-    var mathFont by remember { mutableStateOf<MathFont?>(null) }
-
-    LaunchedEffect(store) {
-        mathFont = runCatching {
-            loadDesktopMathFont(store)
-        }.getOrNull()
-    }
-
-    return mathFont
-}
 
 @Composable
 actual fun rememberMarkdownImageRequestHeaders(): MarkdownImageRequestHeaders {
@@ -65,42 +34,3 @@ actual fun rememberMarkdownImageRequestHeaders(): MarkdownImageRequestHeaders {
         userAgent = session.userAgent,
     )
 }
-
-@OptIn(ExperimentalTextApi::class)
-private suspend fun loadDesktopMathFont(store: ZhihuAccountStore): MathFont = withContext(Dispatchers.IO) {
-    val fontFile = desktopZhihuDataFile("latex-fonts/v$FONT_VERSION").resolve("latinmodern-math.otf")
-    if (!fontFile.exists()) {
-        downloadDesktopMathFont(store, fontFile)
-    }
-    val fontBytes = fontFile.readBytes()
-    val awtFont = java.awt.Font.createFont(java.awt.Font.TRUETYPE_FONT, fontFile)
-    MathFont.OTF(fontBytes, awtFont.asComposeFontFamily())
-}
-
-private suspend fun downloadDesktopMathFont(
-    store: ZhihuAccountStore,
-    fontFile: File,
-) {
-    var lastError: Exception? = null
-    val client = store.client.httpClient()
-    for (url in LM_MATH_URLS) {
-        try {
-            val bytes = client.get(url).body<ByteArray>()
-            if (isOpenTypeFont(bytes)) {
-                fontFile.parentFile.mkdirs()
-                fontFile.writeBytes(bytes)
-                return
-            }
-        } catch (e: Exception) {
-            lastError = e
-        }
-    }
-    throw lastError ?: IllegalStateException("Failed to download Latin Modern Math")
-}
-
-private fun isOpenTypeFont(bytes: ByteArray): Boolean =
-    bytes.size > 4 &&
-        bytes[0] == 0x4F.toByte() &&
-        bytes[1] == 0x54.toByte() &&
-        bytes[2] == 0x54.toByte() &&
-        bytes[3] == 0x4F.toByte()

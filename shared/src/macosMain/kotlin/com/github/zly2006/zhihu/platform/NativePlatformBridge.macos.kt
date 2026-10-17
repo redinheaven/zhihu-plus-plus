@@ -39,8 +39,6 @@ actual val platformName: String = "macOS"
 fun isMacosQuitOnWindowCloseEnabled(): Boolean =
     nativeSettingsStore("settings.properties").getBoolean(MACOS_QUIT_ON_WINDOW_CLOSE_PREFERENCE_KEY, false)
 
-actual val isAigcVoteSupported: Boolean = false
-
 @Composable
 @OptIn(ExperimentalForeignApi::class)
 actual fun rememberExternalUrlOpener(): ExternalUrlOpener = remember {

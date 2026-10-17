@@ -23,10 +23,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBarState
-import androidx.compose.material3.rememberTopAppBarState
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -48,7 +45,6 @@ import com.github.zly2006.zhihu.ui.components.PageTurnCommand
 import com.github.zly2006.zhihu.ui.components.PageTurnDispatcher
 import com.github.zly2006.zhihu.ui.components.pageTurnViewportWithGuide
 import com.github.zly2006.zhihu.ui.components.rememberPageTurnTarget
-import com.github.zly2006.zhihu.ui.components.rememberPreferCollapsedExitUntilCollapsedScrollBehavior
 import com.github.zly2006.zhihu.ui.subscreens.PREF_PAGE_TURN_PERCENT
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -56,7 +52,6 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
-import kotlin.math.roundToInt
 
 @RunWith(AndroidJUnit4::class)
 class PageTurnViewportInstrumentedTest {
@@ -300,57 +295,5 @@ class PageTurnViewportInstrumentedTest {
         assertEquals(expectedContentScroll.toDouble(), scrollState.value.toDouble(), 2.0)
         assertEquals(-expectedContentScroll.toDouble(), postConsumed.toDouble(), 2.0)
         assertEquals(0.0, toolbarConnection.remaining.toDouble(), 0.01)
-    }
-
-    /**
-     * Regression: 翻页结束未触发真实顶栏的吸附，超高标题会停在半收起状态。
-     * 验证首次翻页收完顶栏且正文不动，第二次才滚动正文。
-     * 关联 issue 未提出这项两阶段翻页行为；维护者 zly2006 已于 2026-09-25 明确认可其作为交互契约。
-     * Related issue: https://github.com/zly2006/zhihu-plus-plus/issues/630
-     * Fixed by: https://github.com/zly2006/zhihu-plus-plus/pull/760
-     */
-    @Test
-    @OptIn(ExperimentalMaterial3Api::class)
-    fun pageTurnDrivesOversizedToolbarCollapseToCompletion() {
-        composeRule.resetAppPreferences()
-        composeRule.activity
-            .getSharedPreferences(PREFERENCE_NAME, 0)
-            .edit()
-            .putInt(PREF_PAGE_TURN_PERCENT, 90)
-            .commit()
-
-        val expectedPage = (300 * composeRule.activity.resources.displayMetrics.density).roundToInt() * 0.9f
-        val dispatcher = PageTurnDispatcher()
-        lateinit var toolbarState: TopAppBarState
-        lateinit var scrollState: ScrollState
-        composeRule.setScreenContent {
-            CompositionLocalProvider(LocalPageTurnDispatcher provides dispatcher) {
-                toolbarState = rememberTopAppBarState(initialHeightOffsetLimit = -2 * expectedPage)
-                val toolbarBehavior = rememberPreferCollapsedExitUntilCollapsedScrollBehavior(toolbarState)
-                scrollState = rememberScrollState()
-                val target = rememberPageTurnTarget(
-                    scrollState = scrollState,
-                    enabled = true,
-                )
-                Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .height(300.dp)
-                        .nestedScroll(toolbarBehavior.nestedScrollConnection)
-                        .pageTurnViewportWithGuide(target)
-                        .verticalScroll(scrollState),
-                ) {
-                    repeat(80) { Text("第 $it 行", fontSize = 20.sp) }
-                }
-            }
-        }
-
-        assertTrue(dispatcher.dispatch(PageTurnCommand.PageDown))
-        composeRule.waitUntil(5_000) { toolbarState.collapsedFraction == 1f }
-        assertEquals(0, scrollState.value)
-
-        assertTrue(dispatcher.dispatch(PageTurnCommand.PageDown))
-        composeRule.waitUntil(5_000) { scrollState.value >= expectedPage.toInt() - 2 }
-        assertEquals(expectedPage.toDouble(), scrollState.value.toDouble(), 2.0)
     }
 }

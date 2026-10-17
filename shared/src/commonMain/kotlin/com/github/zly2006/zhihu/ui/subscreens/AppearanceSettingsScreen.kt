@@ -100,6 +100,8 @@ import com.github.zly2006.zhihu.platform.isPageTurnSupported
 import com.github.zly2006.zhihu.platform.platformBottomBarItemLimit
 import com.github.zly2006.zhihu.platform.rememberSettingsStore
 import com.github.zly2006.zhihu.platform.rememberUserMessageSink
+import com.github.zly2006.zhihu.theme.DEFAULT_BACKGROUND_DARK
+import com.github.zly2006.zhihu.theme.DEFAULT_BACKGROUND_LIGHT
 import com.github.zly2006.zhihu.theme.ThemeManager
 import com.github.zly2006.zhihu.theme.ThemeMode
 import com.github.zly2006.zhihu.ui.ANSWER_DOUBLE_TAP_ACTION_PREFERENCE_KEY
@@ -560,6 +562,7 @@ fun AppearanceSettingsScreen(
                         title = "选择背景颜色",
                         initialColor = backgroundColor,
                         presetColors = listOfNotNull(
+                            Color(if (currentIsDarkTheme) DEFAULT_BACKGROUND_DARK else DEFAULT_BACKGROUND_LIGHT),
                             Color(if (currentIsDarkTheme) 0xFF121212.toInt() else 0xFFFFFFFF.toInt()),
                             MaterialTheme.colorScheme.surfaceContainer,
                             if (ThemeManager.isDarkTheme()) Color.Black else null,
