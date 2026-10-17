@@ -8,7 +8,8 @@ Zhihu++ 是注重隐私、无广告的第三方知乎客户端，基于 Kotlin M
 
 - Android 为主。上游分 `full`（端侧 text2vec 模型）和 `lite` 两个 flavor；**本 fork 已合并为单一的「Jev 版」**，AI 屏蔽和关键词提取改为调用 TypeSafe Jev，见「魔改记录」。
 - 实验性桌面端（JVM，Windows MSI / Linux AppImage）、macOS 原生（Kotlin/Native）以及 iOS target。
-- 核心卖点：本地推荐算法（爬虫 + 本地打分，独立于知乎推荐）、屏蔽词 / NLP 屏蔽 / 屏蔽用户与话题、去盐选、zse96 v2 签名调用 Web API、模拟 Android API。
+- 核心卖点：本地推荐算法（爬虫 + 本地打分，独立于知乎推荐）、屏蔽词 / AI 主题屏蔽 / 屏蔽用户、话题与问题、去盐选、离线阅读、zse96 v2 签名调用 Web API、模拟 Android API。
+- 本 fork 的 App 只与知乎通信，外加 AI 屏蔽用的 TypeSafe Jev / Cloudflare Workers AI；上游的遥测、在线通知、更新检查、AIGC 投票等连上游服务器的功能已全部删除。
 - 许可证：AGPL-3.0（仅 v3）。魔改后分发二进制时必须同时提供源码，保留版权头。
 
 版本号在 `gradle.properties`（`app.versionName` / `app.versionCode`）。Gradle 9.7.1，JDK 17 toolchain（`app` 的部分任务用到 JDK 21 toolchain，foojay 插件可自动下载）。
@@ -27,7 +28,7 @@ Zhihu++ 是注重隐私、无广告的第三方知乎客户端，基于 Kotlin M
 | `desktopApp/` | 桌面端入口，`mainClass = com.github.zly2006.zhihu.desktop.MainKt` |
 | `macosApp/`, `macosUiDebug/` | macOS 原生宿主与离屏 UI 调试器 |
 | `rs-zse-sign/` | zse 签名算法的 Rust 实现（独立 crate） |
-| `aigc-vote-server/` | AIGC 标记投票后端（Rust，有自己的 `AGENTS.md`） |
+| `aigc-vote-server/` | 上游的 AIGC 标记投票后端（Rust），本 fork 的 App 已不再使用，目录保留以减少合并冲突 |
 | `apk-recompress/` | APK 重压缩工具（Rust） |
 | `third_party/` | 内置的 markdown / latex / 代码高亮渲染库，作为 Gradle 子项目引入 |
 | `buildSrc/` | 构建逻辑（git 信息、macOS 签名） |
@@ -48,7 +49,7 @@ Zhihu++ 是注重隐私、无广告的第三方知乎客户端，基于 Kotlin M
 | `filter/` | 内容过滤与打开记录支持对象 |
 | `ui/` | 所有 Compose 页面（`ZhihuMain.kt` 为主界面入口），`ui/subscreens/` 为设置子页面 |
 | `markdown/`, `reading/`, `editor/` | 正文渲染、朗读、写回答编辑器 |
-| `notification/`, `updater/`, `theme/`, `platform/`, `util/` | 通知、更新、主题、平台能力声明、工具 |
+| `notification/`, `theme/`, `platform/`, `util/` | 知乎消息通知、主题、平台能力声明、工具（上游的 `updater/` 已删除） |
 
 ## 构建与验证
 
@@ -76,9 +77,9 @@ Windows 上直接跑全量 `./gradlew ktlintFormat` 会在 `shared-local-db` 的
 - 已配置（用户级环境变量，新开终端生效）：
   - JDK：Temurin 17，`JAVA_HOME=C:\Program Files\Eclipse Adoptium\jdk-17.0.20.101-hotspot`；
   - Android SDK：`ANDROID_HOME=C:\Users\Administrator\AppData\Local\Android\Sdk`，装有 command-line tools、`platform-tools`、`platforms/android-37.0`、`build-tools/36.0.0` 与 `37.0.0`、`emulator`、系统镜像 `android-30` / `android-35`（google_apis x86_64）；没有 Android Studio 和 NDK；
-  - 仓库根目录 `local.properties` 写有 `sdk.dir` 和 `typesafe.apiKey`（git 已忽略，不入库）。
+  - 仓库根目录 `local.properties` 写有 `sdk.dir`、`typesafe.apiKey`、`cloudflare.accountId`、`cloudflare.apiToken`（git 已忽略，不入库；提交和推送前要确认这些值没进 diff）。
 - 新版 `sdkmanager` 包名用 `/` 分隔，例如 `sdkmanager "platforms/android-37.0"`，旧的 `;` 写法会报 `Package not found`。在 agent 会话里用管道喂 `y` 接受许可时，sdkmanager 偶尔会卡住不下载；中途杀掉会留下解压一半的镜像（缺 `vendor.img` / `userdata.img`），要删掉目录重装。
-- 未安装 Rust / `cargo-ndk` / NDK / `gh`：Android 构建已不需要 Rust，仅改其他 Rust crate 时才需要。
+- 已安装 GitHub CLI（`C:\Program Files\GitHub CLI\gh.exe`，登录账号 redinheaven，Git Bash 里不在 PATH 时用完整路径），可改仓库简介等；未安装 Rust / `cargo-ndk` / NDK：Android 构建已不需要 Rust，仅改其他 Rust crate 时才需要。
 - AI 屏蔽的 Key 优先用用户在「AI 屏蔽主题」页填写的（偏好 `typesafeApiKey` / `cloudflareAccountId` / `cloudflareApiToken`，见 `Jev.kt` 的 `JevKeys`），留空时用构建时注入的默认值：Jev 的 API Key 从 `local.properties` 的 `typesafe.apiKey`（或环境变量 `TYPESAFE_API_KEY`）读取并打进 APK；回退用的 Cloudflare 账号 ID 和 Token 同样来自 `cloudflare.accountId` / `cloudflare.apiToken`（或 `CF_ACCOUNT_ID` / `CF_API_TOKEN`）。
 - 仓库 `core.symlinks=false`，上游的符号链接在 Windows 上会被检出为内容是目标路径的普通文本文件，修改这类文件时注意不要误提交类型变更（`AGENTS.md` 曾被误存为符号链接模式，已改回普通文件）。
 - 编译耗时：首次 debug 约 20 分钟，之后增量编译 1～3 分钟。项目默认的 Gradle / Kotlin 内存参数在本机够用，不需要本机覆盖；不要修改仓库内 `gradle.properties` 的内存参数（会与上游冲突）。
@@ -131,7 +132,7 @@ Windows 上直接跑全量 `./gradlew ktlintFormat` 会在 `shared-local-db` 的
 5. **签名**：Release 签名读取环境变量 `signingKey` 等（见 `app/build.gradle.kts` 的 `signingConfigs`），不要把密钥写进仓库。
 6. **提交**：commit / PR 标题以 `feat:` / `fix:` / `refactor:` 开头，正文用中文。`feat` / `fix` 按相对基线的产品变化判定：新增用户可见行为是 `feat`，既有行为回归才是 `fix`。未经用户确认不要 commit 或 push。
 7. **构建产物**：本地生成的 Maven 仓库、jar、klib、APK 等不得提交。
-8. **自用安装包**：给用户手机用的 APK 复制到仓库根目录 `=release/`，命名 `zhihu++jev-v<版本>.apk`（`*.apk` 已被 git 忽略）。从 v1.3 起是 release 构建（R8 压缩，约 6 MB，比 debug 包流畅）：`./gradlew :app:assembleRelease` 得到未签名包，再用 `build-tools/36.0.0` 的 `zipalign -p 4` 和 `apksigner sign --ks C:\Users\Administrator\.android\debug.keystore --ks-key-alias androiddebugkey`（密码 `android`）签名；`apksigner.bat` 会把路径里的 `=` 当分隔符，先输出到别处再复制进 `=release/`。release 包不可调试，`run-as` 读不了数据库，要查数据时临时装 debug 包。v1.0、v1.2 是 debug 构建，同样用这个 keystore 签名，版本号显示为「上游 `app.versionName` + 本 fork 后缀」，后缀在 `app/build.gradle.kts` 的 `versionNameSuffix`（如 `-jev1.9`，显示 `0.31-jev1.9`），发新版时改这里；`gradle.properties` 不动，避免合并冲突。这个 keystore 要妥善保留：换签名后不能覆盖安装。APK 内含 Jev API Key，不要分发。
+8. **自用安装包**：给用户手机用的 APK 复制到仓库根目录 `=release/`，命名 `zhihu++jev-v<版本>.apk`（`*.apk` 已被 git 忽略）。从 v1.3 起是 release 构建（R8 压缩，约 6 MB，比 debug 包流畅）：`./gradlew :app:assembleRelease` 得到未签名包，再用 `build-tools/36.0.0` 的 `zipalign -p 4` 和 `apksigner sign --ks C:\Users\Administrator\.android\debug.keystore --ks-key-alias androiddebugkey`（密码 `android`）签名；`apksigner.bat` 会把路径里的 `=` 当分隔符，先输出到别处再复制进 `=release/`。release 包不可调试，`run-as` 读不了数据库，要查数据时临时装 debug 包。v1.0、v1.2 是 debug 构建，同样用这个 keystore 签名，版本号显示为「上游 `app.versionName` + 本 fork 后缀」，后缀在 `app/build.gradle.kts` 的 `versionNameSuffix`（如 `-jev1.9`，显示 `0.31-jev1.9`），发新版时改这里；`gradle.properties` 不动，避免合并冲突。这个 keystore 要妥善保留：换签名后不能覆盖安装。APK 内含构建时注入的 Jev / Cloudflare Key，不要分发；别人自行构建时可不配 Key，在 App 内「AI 屏蔽主题」页填写自己的。
 
    | 版本 | 日期 | 内容 |
    | --- | --- | --- |
@@ -139,11 +140,11 @@ Windows 上直接跑全量 `./gradlew ktlintFormat` 会在 `shared-local-db` 的
    | v1.2 | 2026-10-16 | v1.0 + 系统云端备份 + 设置页「数据同步」（完整数据合并写入用户选的文件、立刻同步、从文件恢复） |
    | v1.3 | 2026-10-17 | 改为 release 构建；性能（已读标记一次读入内存、卡片标题摘要解析缓存）；推荐页广告卡过滤、离线预下载作者头像、首次读到回答底部提示上拉切换、同步失败在设置入口标红、下拉刷新第一页到了就收起刷新圈；质量屏蔽默认隐藏；界面精简（去段评划线、去创作按钮、话题菜单折叠等，见魔改记录）；精简：删除系统云端备份（改为数据同步每日自动同步）、列表自带正文保存、打开回答时的上次阅读提示；Jev 关键词建议改为点击触发；遥测默认关闭 |
    | v1.4 | 2026-10-17 | 版本号显示 `0.31-jev1.4`；文章页顶栏随正文同步折叠、去掉松手吸附，折叠时不再每帧重排正文；首页 Web 端推荐每页按发布时间从新到旧（可关）；去掉上游交流群入口，许可证 / issue / 导出页脚链接改指向本 fork |
-| v1.5 | 2026-10-17 | 卡片菜单「屏蔽问题」（按问题 ID，屏蔽列表新增标签页，数据库 v10）；作者备注（作者页「备注」按钮，名字右侧显示）；回答页去掉「XX 人赞同了该回答」、开头的「谢邀 @XX」段落和「收录」徽章；断网时不再反复弹出网络错误，网络恢复后首页自动刷新 |
-| v1.6 | 2026-10-17 | Jev 3 秒无响应或失败时回退到 Cloudflare Workers AI 的 clef-flash；点卡片作者名进入作者主页 |
-| v1.7 | 2026-10-17 | 删除所有连上游服务器的功能（遥测、在线通知、更新检查、AIGC 标记、崩溃上报、首页「知乎++新动态」）和防沉迷；公式字体打包进 APK，App 只连知乎和 Jev / Cloudflare；护眼配色（米白背景、降低文字反差）；卡片菜单去掉「屏蔽提问者」；屏蔽用户后只移除该作者卡片不整页刷新 |
-| v1.8 | 2026-10-17 | 新图标（青墨绿玻璃高光底 + 米白「知」）；回答页不显示任何徽章；评论字号缩到与首页摘要一致（14sp）；屏蔽带「认证信息」的作者（关注的人除外）；回答卡片显示收藏数 |
-| v1.9 | 2026-10-18 | AI 屏蔽 Key 可在 App 内填写（没填时明确提示）；联网时域名解析偶发失败不再误报「网络不可用」（静默重试两次，提示带出失败的域名），首页 api.zhihu.com 解析失败时改用 www.zhihu.com；评论超过 500 字折叠；评论左滑改为屏蔽评论者（需确认）；README 改为大白话 |
+   | v1.5 | 2026-10-17 | 卡片菜单「屏蔽问题」（按问题 ID，屏蔽列表新增标签页，数据库 v10）；作者备注（作者页「备注」按钮，名字右侧显示）；回答页去掉「XX 人赞同了该回答」、开头的「谢邀 @XX」段落和「收录」徽章；断网时不再反复弹出网络错误，网络恢复后首页自动刷新 |
+   | v1.6 | 2026-10-17 | Jev 3 秒无响应或失败时回退到 Cloudflare Workers AI 的 clef-flash；点卡片作者名进入作者主页 |
+   | v1.7 | 2026-10-17 | 删除所有连上游服务器的功能（遥测、在线通知、更新检查、AIGC 标记、崩溃上报、首页「知乎++新动态」）和防沉迷；公式字体打包进 APK，App 只连知乎和 Jev / Cloudflare；护眼配色（米白背景、降低文字反差）；卡片菜单去掉「屏蔽提问者」；屏蔽用户后只移除该作者卡片不整页刷新 |
+   | v1.8 | 2026-10-17 | 新图标（青墨绿玻璃高光底 + 米白「知」）；回答页不显示任何徽章；评论字号缩到与首页摘要一致（14sp）；屏蔽带「认证信息」的作者（关注的人除外）；回答卡片显示收藏数 |
+   | v1.9 | 2026-10-18 | AI 屏蔽 Key 可在 App 内填写（没填时明确提示）；联网时域名解析偶发失败不再误报「网络不可用」（静默重试两次，提示带出失败的域名），首页 api.zhihu.com 解析失败时改用 www.zhihu.com；评论超过 500 字折叠；评论左滑改为屏蔽评论者（需确认）；README 改为大白话 |
 
 ## 上游规则的取舍
 
@@ -222,9 +223,9 @@ $ADB shell svc wifi disable; $ADB shell svc data disable   # 模拟断网，测�
 - 交互：安卓推荐接口（`parseMobileHomeFeedDisplayItem`）丢掉作者位置以「广告」开头的卡片；离线保存正文时把作者头像一并预下载；第一次读到回答底部（有下一个回答时）提示一次「继续上拉切换」（偏好 `answerSwitchHintShown`）；数据同步上次失败时，账号页「系统与更新」副标题显示红字「数据同步失败」（`CLOUD_SYNC_LAST_ERROR_KEY` 移到 common）；下拉刷新时第一页到了就收起刷新圈，第二页在列表底部继续加载。
 - 屏蔽问题：`blocked_questions` 表（数据库 v10，`BlockedQuestion` / `BlockedQuestionDao`），`FeedContentFilterPipeline` 按 `FilterableContent.questionId` 过滤（回答取所在问题，问题卡片取自身）；首页 / 关注页卡片菜单「屏蔽问题」（`BaseFeedViewModel.handleBlockQuestion`、`FeedDisplayItem.blockableQuestion`），屏蔽列表新增「屏蔽问题」标签页（标签栏改为可滑动）。屏蔽规则 JSON 导入导出未包含屏蔽问题（数据同步会带上）。
 - 作者备注：`ui/components/UserNotes.kt`，按用户 ID 存在偏好 `userNotes`（JSON），最多 9 字；作者页按钮行末尾「备注」，首页卡片和作者页名字右侧显示，安卓推荐卡片在详情加载前按作者名回退匹配。
-- 回答页精简：不显示「XX 人赞同了该回答」（同时不再请求赞同关系和赞同者列表，上游代码保留未调用）；正文第一段以「谢邀 / 谢谢邀请 / 感谢邀请」开头且不超过 40 字时删掉；过滤文字含「收录」的回答徽章（endorsements）。
-- 断网处理：`PaginationViewModel.networkUnavailable`，域名解析失败（`isHostResolutionFailure`）后只提示一次「网络不可用」，不再自动加载下一页（原来列表底部每 50ms 重试、不停弹错误）；`MainActivity` 监听系统网络，恢复且验证可上网时发 `networkReconnected`，离线状态的首页自动刷新。
-- Jev 回退：`Jev.kt` 的 `askJev` 给 Jev 请求 3 秒超时（正常 0.3～0.6 秒），超时或失败时用同样的 noul 请求体（model 改为 `clef-flash`）调用 Cloudflare 官方 API `api.cloudflare.com/client/v4/accounts/<id>/ai/run/@cf/cloudflare/clef-flash`（workers.dev 在国内被墙，响应包在 `result` 里）；两个凭据都没有时 NLP 设置页才显示警告。
+- 回答页精简：不显示「XX 人赞同了该回答」（同时不再请求赞同关系和赞同者列表，上游代码保留未调用）；正文第一段以「谢邀 / 谢谢邀请 / 感谢邀请」开头且不超过 40 字时删掉（回答徽章后来改为全部不显示，见下文「回答徽章」）。
+- 断网处理：`PaginationViewModel.networkUnavailable`，域名解析失败（`isHostResolutionFailure`）且最终放弃后只提示一次，不再自动加载下一页（原来列表底部每 50ms 重试、不停弹错误）；`MainActivity` 监听系统网络，恢复且验证可上网时发 `networkReconnected`，离线状态的首页自动刷新。联网时的偶发解析失败见下文「网络误报」。
+- Jev 回退：`Jev.kt` 的 `askJev` 给 Jev 请求 3 秒超时（正常 0.3～0.6 秒），超时或失败时用同样的 noul 请求体（model 改为 `clef-flash`）调用 Cloudflare 官方 API `api.cloudflare.com/client/v4/accounts/<id>/ai/run/@cf/cloudflare/clef-flash`（workers.dev 在国内被墙，响应包在 `result` 里）。Key 的来源见下文「AI 屏蔽 Key 可在 App 内填写」。
 - 卡片作者名：`FeedCard` 作者行原来挂着空的 `clickable {}` 吞掉点击，改为跳转 `Person`；安卓推荐卡片在详情加载前没有作者 ID，此时点作者名等同点卡片。
 - 护眼配色：默认背景浅色 `#F6F4EF`、深色 `#1A1A1C`（`ThemeManager.DEFAULT_BACKGROUND_*`，用户选过的保留）；`ZhihuTheme` 把正文文字向背景靠 12%、次要文字 6%、各级容器色 50%。
 - 卡片菜单去掉「屏蔽提问者」（屏蔽列表和作者页「屏蔽其提问」仍在）；屏蔽用户确认后调用 `BaseFeedViewModel.removeItemsByAuthor` 只移除该作者卡片，不再整页刷新。
@@ -243,5 +244,9 @@ $ADB shell svc wifi disable; $ADB shell svc data disable   # 模拟断网，测�
 - 首页广告卡片：安卓推荐模式按作者位置的「广告」字样过滤（依据界面上看到的现象，没抓到原始 JSON 核对）；网页推荐模式如再出现漏网需另查。
 - 离线头像：现在会随正文预下载作者头像，但列表卡片用的头像 URL 可能和详情里的尺寸不同，未在断网下实测。
 - 「数据同步」（`AndroidSubscreenRuntimes.kt` 的 `CloudFileSyncSettings`）只编译通过，未在设备上实测写入、合并与恢复。
-- release 包（v1.3）只在模拟器上做了基本验证：首页、回答正文（加粗、标题、分隔线）、上下切换回答、下拉刷新、账号页正常，无崩溃；公式、代码块、图片预览、朗读等没逐项测。
-- 离线阅读、图片预下载、刷新两页、已读标记、屏蔽弹窗手动输入已在 `zhihu_api30` 模拟器上实测通过。
+- 网络误报（v1.9）：联网时偶发解析失败的静默重试、首页 api → www 切换只能在真实网络里出现，模拟器上无法复现，待手机实测；若仍提示，看提示里的域名再决定下一步。安卓推荐 / 混合推荐用的是安卓客户端接口，没有 www 等价接口，只重试不切换。
+- 未实测：评论超过 500 字折叠（模拟器上没遇到长评论）、屏蔽认证用户、文章卡片的收藏数（未核实接口是否返回，暂不显示）。
+- macOS / iOS 代码在 Windows 上无法编译，v1.7 起的删改（更新检查、字体下载器、AIGC 等）只保证 Android 与桌面 JVM 编译通过。
+- README 截图（`fastlane/metadata/android/zh-CN/images/phoneScreenshots/`）为 v1.9 在模拟器上的实拍（关注页的关注者头像一栏已打码），图标 `fastlane/.../images/icon.png` 为新图标；界面改版后记得重拍。
+- 已实测通过（`zhihu_api30` 模拟器）：离线阅读、图片预下载、刷新两页、已读标记、屏蔽弹窗手动输入、新图标（桌面与「关于」页）、断网显示离线内容与恢复后自动刷新、回答卡片收藏数、评论左滑屏蔽评论者、AI Key 卡片显示。
+- release 包只做过基本验证（v1.3：首页、正文、切换回答、下拉刷新、账号页无崩溃）；公式、代码块、图片预览、朗读等没逐项测。

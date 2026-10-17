@@ -2,6 +2,8 @@
 
 [![GitHub release](https://img.shields.io/github/v/release/zly2006/zhihu-plus-plus)](https://github.com/zly2006/zhihu-plus-plus/releases)
 
+> <img src="fastlane/metadata/android/zh-CN/images/icon.png" height="96" align="right" alt="知乎++ Jev 图标">
+>
 > **知乎++ Jev** 是 [知乎++](https://github.com/zly2006/zhihu-plus-plus) 的个人改版：一个更清爽、更安静的知乎。
 >
 > **看得舒服**
@@ -26,7 +28,7 @@
 >
 > **关于 AI 屏蔽**：这项功能要用你自己申请的 Key，在 [TypeSafe](https://typesafe.ai) 或 [Cloudflare](https://dash.cloudflare.com) 注册后获取（Cloudflare 每天有一定免费额度），填在「账号 → 屏蔽列表 → AI 屏蔽主题」里。不填也不影响其他功能。
 >
-> 本改版不提供安装包。下文为原项目的介绍。
+> 本改版不提供安装包。下文为原项目的介绍，其中的遥测、AIGC 标记、版本更新和下载链接在本改版中已删除或不适用。
 
 本项目还不够完善，欢迎PR。
 
@@ -42,16 +44,12 @@ Zhihu++独创本地推荐算法，把内容推荐完全放在本地进行，为�
 
 ## 应用截图
 
+以下为知乎++ Jev v1.9 的实际界面。
+
 | 首页 | 关注 | 日报 | 个人主页 | 文章 |
 | --- | --- | --- | --- | --- |
 | ![首页截图](fastlane/metadata/android/zh-CN/images/phoneScreenshots/1_home.jpg) | ![关注截图](fastlane/metadata/android/zh-CN/images/phoneScreenshots/2_follow.jpg) | ![日报截图](fastlane/metadata/android/zh-CN/images/phoneScreenshots/3_daily.jpg) | ![个人主页截图](fastlane/metadata/android/zh-CN/images/phoneScreenshots/4_people.jpg) | ![文章截图](fastlane/metadata/android/zh-CN/images/phoneScreenshots/5_article.jpg) |
 
-<div style="  display: flex; flex-flow: column; max-width: 520px; margin: auto; align-items: center" align="center">
-  <img height="320" alt="知乎++在老年机上都能流畅运行" src="https://github.com/user-attachments/assets/e85e899c-d899-4309-8382-2a2aee25a1f9" />
-  <div>
-    知乎++在老年机上都能流畅运行 photo by @zeky
-  </div>
-</div>
 
 
 ## 下载
