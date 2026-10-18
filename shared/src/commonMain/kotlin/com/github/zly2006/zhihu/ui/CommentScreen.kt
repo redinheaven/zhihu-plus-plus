@@ -328,6 +328,8 @@ fun SwipeToReplyContainer(
                         }
                     },
                     orientation = Orientation.Horizontal,
+                    // 两个方向都没有动作时不拦截横向拖动，留给外层（如主页的标签页左右切换）
+                    enabled = onArchive != null || onReply != null,
                     onDragStopped = {
                         val currentVal = offsetX.value
 

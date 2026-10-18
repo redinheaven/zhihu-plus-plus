@@ -51,6 +51,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.CopyAll
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.MarkUnreadChatAlt
@@ -110,9 +111,13 @@ import com.github.zly2006.zhihu.data.MOBILE_NOTIFICATION_MESSAGE_URL
 import com.github.zly2006.zhihu.data.MobileNotificationMessageOverview
 import com.github.zly2006.zhihu.data.RecommendationMode
 import com.github.zly2006.zhihu.data.ZhihuJson
+import com.github.zly2006.zhihu.data.cachedContentDetail
+import com.github.zly2006.zhihu.data.navDestination
 import com.github.zly2006.zhihu.data.networkReconnected
 import com.github.zly2006.zhihu.data.target
 import com.github.zly2006.zhihu.filter.RemoteHistorySync
+import com.github.zly2006.zhihu.navigation.Article
+import com.github.zly2006.zhihu.navigation.ArticleType
 import com.github.zly2006.zhihu.navigation.LocalNavigator
 import com.github.zly2006.zhihu.navigation.Notification
 import com.github.zly2006.zhihu.navigation.Pin
@@ -152,6 +157,7 @@ import com.github.zly2006.zhihu.viewmodel.feed.HomeFeedInteractionViewModel
 import com.github.zly2006.zhihu.viewmodel.feed.HomeFeedViewModel
 import com.github.zly2006.zhihu.viewmodel.feed.blockableQuestion
 import com.github.zly2006.zhihu.viewmodel.feed.replaceHomeFeedItemsWithFilteredResult
+import com.github.zly2006.zhihu.viewmodel.fetchContentDetail
 import com.github.zly2006.zhihu.viewmodel.local.LocalHomeFeedViewModel
 import com.github.zly2006.zhihu.viewmodel.postSigned
 import com.github.zly2006.zhihu.viewmodel.rememberPaginationEnvironment
@@ -860,70 +866,95 @@ fun HomeScreen(
                     footer = ProgressIndicatorFooter,
                     key = { item -> item.stableKey },
                 ) { item ->
-                    FeedCard(
-                        item,
-                        thumbnailUrl = when (val target = item.feed?.target) {
-                            is Feed.AnswerTarget -> target.thumbnail
-                            else -> null
+                    // 本 fork：卡片往左滑屏蔽所在问题（同卡片菜单「屏蔽问题」）。所有卡片都接住左右滑，不切换标签页；
+                    // 安卓推荐卡片在后台详情回来前（或从预读、恢复的列表来）不知道所属问题，滑时现查一次详情
+                    SwipeToReplyContainer(
+                        onReply = {
+                            refreshScope.launch {
+                                val question = item.blockableQuestion()
+                                    ?: (item.navDestination as? Article)
+                                        ?.takeIf { it.type == ArticleType.Answer }
+                                        ?.let { answer ->
+                                            (cachedContentDetail(answer) ?: paginationEnvironment.fetchContentDetail(answer)) as? DataHolder.Answer
+                                        }?.let { it.question.id to it.question.title }
+                                if (question != null) {
+                                    viewModel.handleBlockQuestion(userMessages, question.first, question.second)
+                                    // 现查到问题的卡片自己还不带问题信息，按问题批量移除时漏掉它，单独移除
+                                    viewModel.displayItems.removeAll { it.stableKey == item.stableKey }
+                                } else if ((item.navDestination as? Article)?.type == ArticleType.Answer) {
+                                    userMessages.showShortMessage("没查到这条回答所属的问题，稍后再试")
+                                } else {
+                                    userMessages.showShortMessage("这条内容不属于任何问题，无法屏蔽问题")
+                                }
+                            }
                         },
-                        menuItems = { dismissMenu ->
-                            if (feedKeywordExtractionAvailable) {
+                        replyIcon = Icons.Default.Block,
+                    ) {
+                        FeedCard(
+                            item,
+                            thumbnailUrl = when (val target = item.feed?.target) {
+                                is Feed.AnswerTarget -> target.thumbnail
+                                else -> null
+                            },
+                            menuItems = { dismissMenu ->
+                                if (feedKeywordExtractionAvailable) {
+                                    DropdownMenuItem(
+                                        text = { Text("按关键词屏蔽") },
+                                        onClick = {
+                                            dismissMenu()
+                                            viewModel.handleBlockByKeywords(paginationEnvironment, userMessages, item) { (_, contentInfo) ->
+                                                feedToBlockByKeywords = contentInfo.first to contentInfo.second
+                                                showBlockByKeywordsDialog = true
+                                            }
+                                        },
+                                    )
+                                }
                                 DropdownMenuItem(
-                                    text = { Text("按关键词屏蔽") },
+                                    text = { Text("屏蔽用户") },
                                     onClick = {
                                         dismissMenu()
-                                        viewModel.handleBlockByKeywords(paginationEnvironment, userMessages, item) { (_, contentInfo) ->
-                                            feedToBlockByKeywords = contentInfo.first to contentInfo.second
-                                            showBlockByKeywordsDialog = true
+                                        viewModel.handleBlockUser(paginationEnvironment, userMessages, item) { authorInfo ->
+                                            feedAuthorBlockRequest = FeedAuthorBlockRequest(
+                                                type = FeedAuthorBlockType.CONTENT_AUTHOR,
+                                                userId = authorInfo.first,
+                                                userName = authorInfo.second,
+                                            )
                                         }
                                     },
                                 )
-                            }
-                            DropdownMenuItem(
-                                text = { Text("屏蔽用户") },
-                                onClick = {
+                                item.blockableQuestion()?.let { (questionId, questionTitle) ->
+                                    DropdownMenuItem(
+                                        text = { Text("屏蔽问题") },
+                                        onClick = {
+                                            dismissMenu()
+                                            viewModel.handleBlockQuestion(userMessages, questionId, questionTitle)
+                                        },
+                                    )
+                                }
+                                val topics = when (val raw = item.raw) {
+                                    is DataHolder.Answer -> raw.question.topics
+                                    is DataHolder.Question -> raw.topics
+                                    is DataHolder.Article -> raw.topics ?: emptyList()
+                                    is DataHolder.Pin -> raw.topics ?: emptyList()
+                                    else -> emptyList()
+                                }
+                                BlockTopicMenuItems(topics) { topic ->
                                     dismissMenu()
-                                    viewModel.handleBlockUser(paginationEnvironment, userMessages, item) { authorInfo ->
-                                        feedAuthorBlockRequest = FeedAuthorBlockRequest(
-                                            type = FeedAuthorBlockType.CONTENT_AUTHOR,
-                                            userId = authorInfo.first,
-                                            userName = authorInfo.second,
-                                        )
-                                    }
-                                },
-                            )
-                            item.blockableQuestion()?.let { (questionId, questionTitle) ->
-                                DropdownMenuItem(
-                                    text = { Text("屏蔽问题") },
-                                    onClick = {
-                                        dismissMenu()
-                                        viewModel.handleBlockQuestion(userMessages, questionId, questionTitle)
-                                    },
-                                )
-                            }
-                            val topics = when (val raw = item.raw) {
-                                is DataHolder.Answer -> raw.question.topics
-                                is DataHolder.Question -> raw.topics
-                                is DataHolder.Article -> raw.topics ?: emptyList()
-                                is DataHolder.Pin -> raw.topics ?: emptyList()
-                                else -> emptyList()
-                            }
-                            BlockTopicMenuItems(topics) { topic ->
-                                dismissMenu()
-                                viewModel.handleBlockTopic(userMessages, topic.id, topic.name)
-                            }
-                        },
-                    ) { clickedItem, destination ->
-                        val feed = clickedItem.feed
-                        if (feed != null) {
+                                    viewModel.handleBlockTopic(userMessages, topic.id, topic.name)
+                                }
+                            },
+                        ) { clickedItem, destination ->
+                            val feed = clickedItem.feed
+                            if (feed != null) {
 //                            DataHolder.putFeed(feed)
-                            (viewModel as? HomeFeedInteractionViewModel)
-                                ?.onUiContentClick(paginationEnvironment, feed, clickedItem)
-                        } else {
-                            localHomeViewModel?.onLocalItemOpened(clickedItem)
-                        }
-                        if (destination != null) {
-                            navigator.onNavigate(destination)
+                                (viewModel as? HomeFeedInteractionViewModel)
+                                    ?.onUiContentClick(paginationEnvironment, feed, clickedItem)
+                            } else {
+                                localHomeViewModel?.onLocalItemOpened(clickedItem)
+                            }
+                            if (destination != null) {
+                                navigator.onNavigate(destination)
+                            }
                         }
                     }
                 }

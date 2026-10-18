@@ -1,5 +1,6 @@
 package com.hrm.markdown.renderer
 
+import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.compositionLocalOf
@@ -21,6 +22,12 @@ import com.hrm.markdown.runtime.MarkdownDirectiveRegistry
 internal val LocalOnLinkClick = compositionLocalOf<((String) -> Unit)?> { null }
 internal val LocalOnFootnoteClick = compositionLocalOf<((String) -> Unit)?> { null }
 internal val LocalOnFootnoteBackClick = compositionLocalOf<((String) -> Unit)?> { null }
+
+/**
+ * 宿主提供时，含 [com.hrm.markdown.parser.ast.Highlight]（HTML `<mark>`）的段落和标题会挂上这个 requester，
+ * 宿主调用 bringIntoView 即可把正文滚到高亮处（如收藏夹关键词搜索定位）。
+ */
+val LocalMarkdownHighlightRequester = compositionLocalOf<BringIntoViewRequester?> { null }
 
 /** 由宿主处理知乎划线的点赞、评论等产品交互。 */
 val LocalOnSegmentHighlightClick = compositionLocalOf<((SegmentHighlight) -> Unit)?> { null }

@@ -25,9 +25,13 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.ScrollableDefaults
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.draggable
+import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -50,6 +54,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.systemBars
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -85,6 +90,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -160,8 +166,10 @@ import com.github.zly2006.zhihu.util.smoothGradient
 import com.github.zly2006.zhihu.viewmodel.ArticleViewModel
 import com.github.zly2006.zhihu.viewmodel.addReadHistory
 import com.github.zly2006.zhihu.viewmodel.formatArticleDateTime
+import com.github.zly2006.zhihu.viewmodel.markCollectionSearchKeyword
 import com.github.zly2006.zhihu.viewmodel.rememberPaginationEnvironment
 import com.github.zly2006.zhihu.viewmodel.sharedArticleAnswerSwitchState
+import com.hrm.markdown.renderer.LocalMarkdownHighlightRequester
 import com.materialkolor.ktx.harmonize
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
@@ -411,6 +419,24 @@ fun ArticleScreen(
         }
     }
 
+    // 本 fork：从收藏夹关键词搜索打开时，给关键词包上 <mark> 高亮，正文加载出来后滚到那一段
+    val searchKeyword = article.searchKeyword?.takeIf { it.isNotBlank() }
+    val searchHighlightRequester = remember { BringIntoViewRequester() }
+    val renderedContent = remember(viewModel.content, searchKeyword) {
+        if (searchKeyword == null || viewModel.content.isBlank()) {
+            viewModel.content
+        } else {
+            markCollectionSearchKeyword(viewModel.content, searchKeyword, article.searchSentence.orEmpty())
+        }
+    }
+    LaunchedEffect(renderedContent) {
+        if (searchKeyword == null || viewModel.content.isBlank()) return@LaunchedEffect
+        snapshotFlow { scrollState.maxValue > 0 && scrollState.maxValue != Int.MAX_VALUE }.first { it }
+        withFrameNanos { }
+        withFrameNanos { }
+        searchHighlightRequester.bringIntoView()
+    }
+
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     fun MainContent() {
@@ -423,10 +449,18 @@ fun ArticleScreen(
                 {}
             } else {
                 {
+                    val topBarFling = ScrollableDefaults.flingBehavior()
                     Box(
                         modifier = Modifier
                             .swipeBack(PointerEventPass.Initial)
-                            .onSizeChanged {
+                            // 本 fork：顶栏盖在正文上方，触摸到不了正文；上下拖动顶栏时转给正文滚动（含松手后的惯性）
+                            .draggable(
+                                orientation = Orientation.Vertical,
+                                state = rememberDraggableState { delta -> scrollState.dispatchRawDelta(-delta) },
+                                onDragStopped = { velocity ->
+                                    scrollState.scroll { with(topBarFling) { performFling(-velocity) } }
+                                },
+                            ).onSizeChanged {
                                 topBarState.heightPx = it.height.toFloat()
                             }.graphicsLayer {
                                 translationY = topBarState.offset.value
@@ -1000,37 +1034,41 @@ fun ArticleScreen(
                                 }
                                 Spacer(modifier = Modifier.height((16 + 36).dp))
                             } else {
-                                RenderMarkdown(
-                                    html = viewModel.content,
-                                    modifier = Modifier
-                                        .testTag("article_content")
-                                        .articleMarkdownSelectionWorkaround(),
-                                    scrollState = scrollState,
-                                    selectable = true,
-                                    enableScroll = false,
-                                    useTiqianRenderer = useTiqianMarkdown,
-                                    header = {},
-                                    footer = {
-                                        ArticleVideoAttachmentContent(viewModel.attachment)
-                                        Column(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalAlignment = Alignment.End,
-                                        ) {
-                                            if (!pinAnswerDate) {
-                                                DateTexts()
+                                CompositionLocalProvider(
+                                    LocalMarkdownHighlightRequester provides searchHighlightRequester.takeIf { searchKeyword != null },
+                                ) {
+                                    RenderMarkdown(
+                                        html = renderedContent,
+                                        modifier = Modifier
+                                            .testTag("article_content")
+                                            .articleMarkdownSelectionWorkaround(),
+                                        scrollState = scrollState,
+                                        selectable = true,
+                                        enableScroll = false,
+                                        useTiqianRenderer = useTiqianMarkdown,
+                                        header = {},
+                                        footer = {
+                                            ArticleVideoAttachmentContent(viewModel.attachment)
+                                            Column(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalAlignment = Alignment.End,
+                                            ) {
+                                                if (!pinAnswerDate) {
+                                                    DateTexts()
+                                                }
+                                                if (viewModel.ipInfo != null) {
+                                                    Text(
+                                                        "IP属地：${viewModel.ipInfo}",
+                                                        color = Color.Gray,
+                                                        fontSize = 11.sp,
+                                                    )
+                                                }
                                             }
-                                            if (viewModel.ipInfo != null) {
-                                                Text(
-                                                    "IP属地：${viewModel.ipInfo}",
-                                                    color = Color.Gray,
-                                                    fontSize = 11.sp,
-                                                )
-                                            }
-                                        }
-                                        ContentEndMarker()
-                                        Spacer(modifier = Modifier.height((16 + 36).dp))
-                                    },
-                                )
+                                            ContentEndMarker()
+                                            Spacer(modifier = Modifier.height((16 + 36).dp))
+                                        },
+                                    )
+                                }
                             }
                         }
                     }

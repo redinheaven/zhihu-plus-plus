@@ -1,6 +1,7 @@
 package com.hrm.markdown.renderer.block
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -14,6 +15,7 @@ import androidx.compose.ui.unit.dp
 import com.hrm.markdown.parser.ast.*
 import com.hrm.markdown.renderer.MarkdownBlockChildren
 import com.hrm.markdown.renderer.LocalMarkdownDirectiveRegistry
+import com.hrm.markdown.renderer.LocalMarkdownHighlightRequester
 import com.hrm.markdown.renderer.LocalMarkdownTheme
 import com.hrm.markdown.renderer.LocalRendererDocument
 import com.hrm.markdown.runtime.DirectiveBlockRenderScope
@@ -23,6 +25,9 @@ private fun List<IntRange>.flattenLineNumbers(): Set<Int> = buildSet {
         addAll(range)
     }
 }
+
+private fun ContainerNode.containsHighlight(): Boolean =
+    children.any { it is Highlight || (it is ContainerNode && it.containsHighlight()) }
 
 /**
  * 块级节点分发器。
@@ -35,6 +40,16 @@ internal fun BlockRenderer(
     modifier: Modifier = Modifier,
 ) {
     val directiveRegistry = LocalMarkdownDirectiveRegistry.current
+    val highlightRequester = LocalMarkdownHighlightRequester.current
+    val modifier = if (
+        highlightRequester != null &&
+        (node is Paragraph || node is Heading || node is SetextHeading) &&
+        (node as ContainerNode).containsHighlight()
+    ) {
+        modifier.bringIntoViewRequester(highlightRequester)
+    } else {
+        modifier
+    }
     if (node is MathBlock) {
         MathBlockRenderer(
             latex = node.literal,

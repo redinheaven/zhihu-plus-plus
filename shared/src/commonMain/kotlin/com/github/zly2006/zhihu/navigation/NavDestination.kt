@@ -233,6 +233,9 @@ data class Article(
     var authorBio: String = "loading...",
     var avatarSrc: String? = null,
     var excerpt: String? = null,
+    /** 本 fork：从收藏夹关键词搜索打开时，正文高亮这个关键词并滚到 [searchSentence] 所在段落 */
+    val searchKeyword: String? = null,
+    val searchSentence: String? = null,
 ) : NavDestination {
     override fun hashCode(): Int = id.hashCode()
 

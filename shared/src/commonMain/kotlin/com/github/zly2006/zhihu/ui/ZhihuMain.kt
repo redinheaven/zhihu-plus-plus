@@ -789,6 +789,8 @@ private fun MainTabsPager(
     HorizontalPager(
         state = pagerState,
         modifier = Modifier.fillMaxSize(),
+        // 本 fork：标签页只能点底部按钮切换，不能左右滑动切换
+        userScrollEnabled = false,
         pageNestedScrollConnection = NoOpPagerNestedScrollConnection,
     ) { pageIndex ->
         val page = pages.getOrNull(pageIndex) ?: return@HorizontalPager
