@@ -42,13 +42,15 @@ class ForegroundReadFilterPipelineTest {
     }
 
     @Test
-    fun keepsUnviewedNormalItemAndRecordsView() = runTest {
+    fun keepsUnviewedNormalItemAndRecordsViewOnlyWhenSeen() = runTest {
         val fixture = fixture()
         val item = item("item", 1, details = "文章 · 100 赞")
 
         val result = fixture.pipeline().filter(listOf(item))
 
         assertEquals(listOf("item"), result.map { it.title })
+        assertEquals(0, fixture.database.contentFilterDao().getRecordCount())
+        fixture.pipeline().recordViews(result)
         assertEquals(1, fixture.database.contentFilterDao().getRecordCount())
         assertEquals(
             emptyList(),
@@ -140,7 +142,7 @@ class ForegroundReadFilterPipelineTest {
     fun contentExposureRecorderKeepsOldReadsAndMarksInteraction() = runTest {
         val fixture = fixture()
 
-        fixture.pipeline().filter(listOf(item("item", 1, details = "文章 · 100 赞")))
+        fixture.pipeline().recordViews(listOf(item("item", 1, details = "文章 · 100 赞")))
         fixture.manager.recordContentInteraction("article", "1")
 
         val record = fixture.database.contentFilterDao().getViewRecord("article:1")

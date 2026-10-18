@@ -63,6 +63,7 @@ fun FeedPullToRefresh(
     viewModel: BaseFeedViewModel,
     environment: PaginationEnvironment,
     padding: PaddingValues = PaddingValues(0.dp),
+    onRefresh: suspend () -> Unit = { viewModel.pullToRefresh(environment) },
     content: @Composable BoxScope.() -> Unit,
 ) {
     val state = rememberPullToRefreshState()
@@ -70,9 +71,7 @@ fun FeedPullToRefresh(
     PullToRefreshBox(
         isRefreshing = viewModel.isPullToRefresh && viewModel.isLoading,
         onRefresh = {
-            scope.launch {
-                viewModel.pullToRefresh(environment)
-            }
+            scope.launch { onRefresh() }
         },
         indicator = {
             PullToRefreshDefaults.Indicator(

@@ -168,7 +168,7 @@ private val emptyBlockedTopicDao = object : BlockedTopicDao {
 private val emptyBlockedFeedRecordDao = object : BlockedFeedRecordDao {
     override fun observeAll(): Flow<List<BlockedFeedRecord>> = emptyFlow()
 
-    override suspend fun insert(record: BlockedFeedRecord): Long = 0L
+    override suspend fun insertAll(records: List<BlockedFeedRecord>) = Unit
 
     override suspend fun deleteById(id: Long) = Unit
 

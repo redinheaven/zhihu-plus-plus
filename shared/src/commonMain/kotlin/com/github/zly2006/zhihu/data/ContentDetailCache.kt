@@ -61,8 +61,10 @@ object ContentDetailCache {
 
     private val cache = mutableMapOf<CacheKey, CacheEntry>()
     private val mutex = Mutex()
-    private const val CACHE_EXPIRY_MS = 10 * 60 * 1000L // 10分钟
-    private const val MAX_CACHE_SIZE = 100
+
+    // 首页预取的下一轮可能放很久才换上，点开时仍要秒开；赞数等打开时会再联网更新，不怕旧
+    private const val CACHE_EXPIRY_MS = 2 * 60 * 60 * 1000L // 2 小时
+    private const val MAX_CACHE_SIZE = 200
 
     /**
      * 获取内容详情，优先从缓存读取
@@ -141,18 +143,32 @@ val networkReconnected = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
  */
 val networkAvailable = MutableStateFlow(true)
 
-/** 保存一条内容详情 JSON 供离线阅读。 */
-private suspend fun saveOfflineContent(key: String, type: String, json: JsonObject) {
+/** 本进程是否已经清理过过期的离线正文；清理要扫整表，每次启动做一次就够 */
+private var offlineContentPruned = false
+
+/**
+ * 保存一条内容详情 JSON 供离线阅读，并预下载作者头像。
+ * 正文图片只在 [prefetchImages]（用户真正打开内容）时预下载：首页过滤会拉每张卡片的详情，
+ * 若都下载正文图片，刷一次首页就要下几十篇回答的全部图片，还会把真正看过的图片挤出磁盘缓存。
+ */
+private suspend fun saveOfflineContent(key: String, type: String, json: JsonObject, prefetchImages: Boolean) {
     runCatching {
         val dao = getContentFilterDatabase().offlineContentDao()
         val now = Clock.System.now().toEpochMilliseconds()
         dao.upsert(OfflineContent(key, type, json.toString(), now))
-        dao.prune(before = now - OFFLINE_KEEP_DAYS * 24 * 60 * 60 * 1000L, keep = OFFLINE_MAX_COUNT)
-        val contentImages = json["content"]
-            ?.jsonPrimitive
-            ?.contentOrNull
-            ?.let { html -> Ksoup.parse(html).select("img").mapNotNull { extractImageUrl(it::attr) } }
-            .orEmpty()
+        if (!offlineContentPruned) {
+            offlineContentPruned = true
+            dao.prune(before = now - OFFLINE_KEEP_DAYS * 24 * 60 * 60 * 1000L, keep = OFFLINE_MAX_COUNT)
+        }
+        val contentImages = if (prefetchImages) {
+            json["content"]
+                ?.jsonPrimitive
+                ?.contentOrNull
+                ?.let { html -> Ksoup.parse(html).select("img").mapNotNull { extractImageUrl(it::attr) } }
+                .orEmpty()
+        } else {
+            emptyList()
+        }
         // 作者头像一并下载，离线时卡片和正文页才有头像
         val avatar = (json["author"] as? JsonObject)?.get("avatar_url")?.jsonPrimitive?.contentOrNull
         (contentImages + listOfNotNull(avatar))
@@ -187,6 +203,7 @@ fun zhihuContentDetailInclude(destination: NavDestination): String = when (desti
 
 suspend fun fetchZhihuContentDetail(
     destination: NavDestination,
+    prefetchImages: Boolean,
     fetchJson: suspend (String, String) -> JsonObject?,
 ): DataHolder.Content? {
     val url = zhihuContentDetailUrl(destination) ?: return null
@@ -196,7 +213,7 @@ suspend fun fetchZhihuContentDetail(
     val offlineKey = "$type:$id"
     val json = try {
         fetchJson(url, include)?.also { fetched ->
-            if (fetched.containsKey("id")) saveOfflineContent(offlineKey, type, fetched)
+            if (fetched.containsKey("id")) saveOfflineContent(offlineKey, type, fetched, prefetchImages)
         }
     } catch (e: Exception) {
         if (e is CancellationException) throw e
@@ -214,13 +231,26 @@ suspend fun fetchZhihuContentDetail(
     }
 }
 
+/**
+ * 不联网能拿到的详情：先查内存缓存，再查离线正文表。冷启动后内存缓存是空的，
+ * 但首页过滤和预取时拉过的详情都存进了离线正文表，打开这些回答仍能先显示再联网更新。
+ */
+suspend fun cachedContentDetail(destination: Article): DataHolder.Content? =
+    ContentDetailCache.getOrFetch(destination) { null } ?: runCatching {
+        val (type, id) = ContentDetailCache.extractContentInfo(destination) ?: return null
+        getContentFilterDatabase()
+            .offlineContentDao()
+            .get("$type:$id")
+            ?.let { decodeArticleContentDetail(destination, Json.parseToJsonElement(it.json).jsonObject) }
+    }.getOrNull()
+
 suspend fun ContentDetailCache.getOrFetchContentDetail(
     destination: NavDestination,
     fetchJson: suspend (String, String) -> JsonObject?,
 ): DataHolder.Content? =
     runCatching {
         getOrFetch(destination) { navDestination ->
-            fetchZhihuContentDetail(navDestination, fetchJson)
+            fetchZhihuContentDetail(navDestination, prefetchImages = false, fetchJson)
         }
     }.getOrElse { error ->
         if (error is CancellationException) throw error

@@ -29,15 +29,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Comment
-import androidx.compose.material.icons.automirrored.filled.VolumeOff
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.FilterCenterFocus
 import androidx.compose.material.icons.filled.GetApp
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.outlined.DesktopWindows
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -51,36 +48,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
-import androidx.lifecycle.viewModelScope
 import com.github.zly2006.zhihu.navigation.Article
-import com.github.zly2006.zhihu.navigation.ArticleType
-import com.github.zly2006.zhihu.platform.rememberSettingsStore
-import com.github.zly2006.zhihu.reading.ReadingContentType
-import com.github.zly2006.zhihu.reading.ReadingQueueItem
-import com.github.zly2006.zhihu.reading.ReadingQueueSourceRegistry
-import com.github.zly2006.zhihu.reading.ReadingStartRequest
-import com.github.zly2006.zhihu.reading.hasReadableFields
-import com.github.zly2006.zhihu.reading.isReadingPlayerSupported
-import com.github.zly2006.zhihu.reading.loadReadingPlaybackSpeed
-import com.github.zly2006.zhihu.reading.loadReadingPreferences
-import com.github.zly2006.zhihu.reading.rememberReadingPlayerController
 import com.github.zly2006.zhihu.theme.ThemeManager
-import com.github.zly2006.zhihu.ui.TtsState
 import com.github.zly2006.zhihu.ui.articleActionText
-import com.github.zly2006.zhihu.ui.articleSpeechText
 import com.github.zly2006.zhihu.ui.components.MyModalBottomSheet
 import com.github.zly2006.zhihu.ui.components.ShareAction
 import com.github.zly2006.zhihu.ui.components.rememberShareActionExecutor
 import com.github.zly2006.zhihu.ui.rememberArticleBrowserOpener
-import com.github.zly2006.zhihu.ui.rememberArticleSpeechToggler
-import com.github.zly2006.zhihu.ui.rememberArticleTtsState
-import com.github.zly2006.zhihu.util.Log
 import com.github.zly2006.zhihu.viewmodel.ArticleViewModel
 import com.materialkolor.ktx.harmonize
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 private val VoteUpNeutralContent = Color(0xFF3671EE)
 private val VoteUpNeutralContentDark = Color(0xFF628DF7)
@@ -112,39 +89,15 @@ internal fun voteUpNeutralButtonColors() = ButtonDefaults.buttonColors(
 fun ArticleActionsMenu(
     article: Article,
     viewModel: ArticleViewModel,
-    answerQueueFallbackProvider: (suspend (limit: Int) -> List<Article>)? = null,
     showMenu: Boolean,
     onDismissRequest: () -> Unit,
     onSummaryRequest: () -> Unit,
     onExportRequest: () -> Unit,
     onSetImmersiveDoubleTap: () -> Unit = {},
 ) {
-    val ttsState = rememberArticleTtsState()
-    val toggleSpeech = rememberArticleSpeechToggler()
-    val readingPlayer = rememberReadingPlayerController()
-    val readingPlayerState by readingPlayer.state
-    val readingSettings = rememberSettingsStore()
     val openArticleInBrowser = rememberArticleBrowserOpener()
     val executeShareAction = rememberShareActionExecutor()
     val coroutineScope = rememberCoroutineScope()
-    val readingItem = ReadingQueueItem(
-        contentType = when (article.type) {
-            ArticleType.Answer -> ReadingContentType.Answer
-            ArticleType.Article -> ReadingContentType.Article
-        },
-        id = article.id,
-        title = viewModel.title,
-        author = viewModel.authorName,
-        questionId = viewModel.questionId.takeIf { it > 0 },
-        bodyHtml = viewModel.content.takeIf(String::isNotBlank),
-        publishedAt = viewModel.createdAt,
-        updatedAt = viewModel.updatedAt,
-        voteUpCount = viewModel.voteUpCount,
-        commentCount = viewModel.commentCount,
-    )
-    val readingPreferences = loadReadingPreferences(readingSettings)
-    val readingPlaybackSpeed = loadReadingPlaybackSpeed(readingSettings)
-    val hasReadingSession = readingPlayerState.hasSession
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
     @Composable
@@ -209,136 +162,6 @@ fun ArticleActionsMenu(
 
     @Composable
     fun Content() {
-        MenuActionButton(
-            icon = {
-                if (isReadingPlayerSupported && hasReadingSession) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.VolumeOff,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                } else {
-                    when (ttsState) {
-                        TtsState.Initializing, TtsState.Uninitialized -> CircularProgressIndicator(
-                            modifier = Modifier.height(24.dp),
-                            strokeWidth = 2.dp,
-                        )
-
-                        else -> Icon(
-                            if (!isReadingPlayerSupported && ttsState.isSpeaking) {
-                                Icons.AutoMirrored.Filled.VolumeOff
-                            } else {
-                                Icons.AutoMirrored.Filled.VolumeUp
-                            },
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
-            },
-            text = if (isReadingPlayerSupported) {
-                if (hasReadingSession) "停止朗读" else "开始连续朗读"
-            } else if (ttsState.isSpeaking) {
-                "停止朗读"
-            } else {
-                "开始朗读"
-            },
-            enabled = if (isReadingPlayerSupported) {
-                hasReadingSession || readingItem.hasReadableFields(readingPreferences)
-            } else {
-                ttsState !in listOf(TtsState.Error, TtsState.Uninitialized, TtsState.Initializing)
-            },
-            onClick = {
-                onDismissRequest()
-                if (isReadingPlayerSupported) {
-                    if (hasReadingSession) {
-                        readingPlayer.stop()
-                    } else {
-                        coroutineScope.launch {
-                            // Home feed mixes unrelated content; the question navigator owns answer order.
-                            val useQuestionAnswerOrder = article.type == ArticleType.Answer &&
-                                article.readingQueueSourceId?.startsWith("home:") == true
-                            val originQueue = ReadingQueueSourceRegistry.queueStartingAt(
-                                current = readingItem,
-                                sourceId = article.readingQueueSourceId.takeUnless { useQuestionAnswerOrder },
-                                limit = readingPreferences.queueLimit,
-                            )
-                            val queue = if (
-                                article.type == ArticleType.Answer &&
-                                (useQuestionAnswerOrder || originQueue.size < readingPreferences.queueLimit) &&
-                                readingPreferences.queueLimit > 1
-                            ) {
-                                val fallbackAfterCurrent = try {
-                                    val fallbackArticles = answerQueueFallbackProvider
-                                        ?.invoke(readingPreferences.queueLimit - 1)
-                                        ?: viewModel.answerNextIds.map { answerId ->
-                                            Article(
-                                                type = ArticleType.Answer,
-                                                id = answerId,
-                                                title = viewModel.title,
-                                            )
-                                        }
-                                    fallbackArticles.map { fallback ->
-                                        ReadingQueueItem(
-                                            contentType = ReadingContentType.Answer,
-                                            id = fallback.id,
-                                            title = fallback.title
-                                                .takeUnless { it == "loading..." }
-                                                .orEmpty()
-                                                .ifBlank { viewModel.title },
-                                            author = fallback.authorName
-                                                .takeUnless { it == "loading..." }
-                                                .orEmpty(),
-                                            questionId = viewModel.questionId.takeIf { it > 0 },
-                                        )
-                                    }
-                                } catch (error: CancellationException) {
-                                    throw error
-                                } catch (error: Exception) {
-                                    Log.w("ArticleActionsMenu", "Failed to load the remaining reading queue", error)
-                                    emptyList()
-                                }
-                                ReadingQueueSourceRegistry.queueStartingAt(
-                                    current = readingItem,
-                                    sourceId = article.readingQueueSourceId.takeUnless { useQuestionAnswerOrder },
-                                    limit = readingPreferences.queueLimit,
-                                    fallbackAfterCurrent = fallbackAfterCurrent,
-                                )
-                            } else {
-                                originQueue
-                            }
-                            readingPlayer.start(
-                                ReadingStartRequest(
-                                    queue = queue,
-                                    preferences = readingPreferences,
-                                    sourceId = article.readingQueueSourceId,
-                                    playbackSpeed = readingPlaybackSpeed,
-                                ),
-                            )
-                        }
-                    }
-                } else if (ttsState.isSpeaking) {
-                    toggleSpeech(viewModel.title, viewModel.content)
-                } else if (ttsState !in listOf(TtsState.Error, TtsState.Uninitialized, TtsState.Initializing)) {
-                    viewModel.viewModelScope.launch {
-                        try {
-                            withContext(Dispatchers.Default) {
-                                val textToRead = articleSpeechText(viewModel.title, viewModel.content)
-                                withContext(Dispatchers.Main) {
-                                    if (textToRead.isNotBlank()) {
-                                        toggleSpeech(viewModel.title, viewModel.content)
-                                    }
-                                }
-                            }
-                        } catch (e: Exception) {
-                            withContext(Dispatchers.Main) { Unit }
-                        }
-                    }
-                }
-            },
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
         MenuActionButton(
             icon = Icons.Filled.Share,
             text = "分享",

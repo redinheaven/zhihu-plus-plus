@@ -61,6 +61,9 @@ abstract class BaseFeedViewModel : PaginationViewModel<Feed>(typeOf<Feed>()) {
     var isPullToRefresh by mutableStateOf(false)
         protected set
 
+    /** 和 [displayItems] 一样，混合推荐让两个子 ViewModel 共用父 ViewModel 的这一份 */
+    internal var listSync = FeedListSync()
+
     override fun processResponse(environment: PaginationEnvironment, data: List<Feed>, rawData: JsonArray) {
         super.processResponse(environment, data, rawData)
         // 本 fork：「隐藏」模式在所有信息流页面生效（上游只在首页 HomeFeedViewModel 里处理），不留「已屏蔽」占位
@@ -80,8 +83,8 @@ abstract class BaseFeedViewModel : PaginationViewModel<Feed>(typeOf<Feed>()) {
 
     suspend fun pullToRefresh(environment: PaginationEnvironment) {
         isPullToRefresh = true
-        displayItems.clear()
         if (isLoading) return
+        listSync.replaceOnNextAdd = true
         errorMessage = null
         networkUnavailable = false
         hostResolutionRetries = 0
@@ -101,6 +104,8 @@ abstract class BaseFeedViewModel : PaginationViewModel<Feed>(typeOf<Feed>()) {
         } catch (e: Exception) {
             errorHandle(e, environment)
         }
+        // 第一页失败时保留旧列表，免得之后加载的页把它清掉
+        if (errorMessage != null) listSync.replaceOnNextAdd = false
         isLoading = false
         isPullToRefresh = false
     }
@@ -136,11 +141,12 @@ abstract class BaseFeedViewModel : PaginationViewModel<Feed>(typeOf<Feed>()) {
     }
 
     fun addDisplayItems(newItems: List<FeedDisplayItem>) {
-        newItems.forEach {
-            if (displayItems.none { existing -> existing.stableKey == it.stableKey }) {
-                displayItems.add(it)
-            }
+        if (listSync.replaceOnNextAdd) {
+            listSync.replaceOnNextAdd = false
+            displayItems.clear()
         }
+        val existingKeys = displayItems.mapTo(hashSetOf()) { it.stableKey }
+        displayItems.addAll(newItems.filter { existingKeys.add(it.stableKey) })
     }
 
     fun handleBlockUser(
@@ -254,6 +260,19 @@ abstract class BaseFeedViewModel : PaginationViewModel<Feed>(typeOf<Feed>()) {
     }
 }
 
+/** 信息流列表的维护状态，见 [BaseFeedViewModel.listSync] */
+class FeedListSync {
+    /**
+     * 列表页维护的屏幕上可见卡片的 key。后台过滤（晚于卡片显示 0.5～2 秒）命中的可见卡片不立刻移除，
+     * 记进 [pendingRemovalKeys]，等滑出屏幕再由列表页移除，免得正在看的卡片突然消失、整个列表往上跳。
+     */
+    var visibleItemKeys: Set<Any> = emptySet()
+    val pendingRemovalKeys = mutableSetOf<String>()
+
+    /** 下拉刷新时旧列表先留着，等新的第一页到了再整体替换，刷新期间不出现空白 */
+    var replaceOnNextAdd = false
+}
+
 /** 卡片所属的问题（回答取其所在问题）的 ID 和标题，供「屏蔽问题」使用；文章、想法等返回 null。 */
 fun FeedDisplayItem.blockableQuestion(): Pair<Long, String>? = when (val raw = raw) {
     is DataHolder.Answer -> raw.question.id to raw.question.title
@@ -270,9 +289,16 @@ fun FeedDisplayItem.blockableQuestion(): Pair<Long, String>? = when (val raw = r
  * with the same [FeedDisplayItem.stableKey]. This lets delayed quality/content filters swap an already
  * rendered card with an `已屏蔽` placeholder while preserving existing raw content if the replacement has not
  * loaded one. Reverse-block mode is intentionally ignored because it renders filtered items directly.
+ *
+ * Items whose key is in [protectedKeys] (currently on screen) are kept instead of removed; their keys are
+ * returned so the caller can remove them once they scroll out of view.
  */
-internal fun MutableList<FeedDisplayItem>.replaceHomeFeedItemsWithFilteredResult(filterResult: HomeFeedFilterResult) {
-    if (filterResult.reverseBlock) return
+internal fun MutableList<FeedDisplayItem>.replaceHomeFeedItemsWithFilteredResult(
+    filterResult: HomeFeedFilterResult,
+    protectedKeys: Set<Any> = emptySet(),
+): Set<String> {
+    if (filterResult.reverseBlock) return emptySet()
+    val deferredKeys = mutableSetOf<String>()
 
     val foregroundKeys = filterResult.foregroundItems.map { it.stableKey }.toSet()
     val filteredItemsByKey = filterResult.filteredItems.associateBy { it.stableKey }
@@ -285,11 +311,15 @@ internal fun MutableList<FeedDisplayItem>.replaceHomeFeedItemsWithFilteredResult
         }
 
         val filteredVersion = filteredItemsByKey[item.stableKey]
-        if (filteredVersion == null) {
+        if (filteredVersion == null && item.stableKey in protectedKeys) {
+            deferredKeys.add(item.stableKey)
+            index++
+        } else if (filteredVersion == null) {
             removeAt(index)
         } else {
             this[index] = filteredVersion.copy(raw = filteredVersion.raw ?: item.raw)
             index++
         }
     }
+    return deferredKeys
 }

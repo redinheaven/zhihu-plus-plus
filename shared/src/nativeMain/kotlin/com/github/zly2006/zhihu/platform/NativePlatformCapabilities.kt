@@ -149,6 +149,9 @@ actual fun Modifier.exportTestTagsForUiAutomation(): Modifier = this
 @Composable
 actual fun rememberAppPrivateDirectory(): Path = remember { Path(nativeAppPrivateDirectoryPath()) }
 
+@Composable
+actual fun rememberUserFileDirectory(): Path = rememberAppPrivateDirectory()
+
 actual val isJvm: Boolean = false
 
 actual val isNative: Boolean = true

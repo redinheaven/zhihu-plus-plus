@@ -17,9 +17,11 @@
 
 package com.github.zly2006.zhihu.ui
 
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -50,6 +52,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.github.zly2006.zhihu.data.Collection
@@ -136,7 +139,8 @@ fun CollectionScreen(
         },
     ) { innerPadding ->
         PaginatedList(
-            items = collections,
+            // 本 fork：一行两个收藏夹
+            items = collections.chunked(2),
             onLoadMore = {
                 if (!useTestCollections) {
                     viewModel.loadMore(environment)
@@ -150,45 +154,55 @@ fun CollectionScreen(
                 .pageTurnViewportWithGuide(pageTurnTarget)
                 .testTag(COLLECTION_SCREEN_LIST_TAG),
             footer = ProgressIndicatorFooter,
-        ) { collection ->
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 8.dp)
-                    .testTag("collection_screen_item_${collection.id}"),
-                elevation = CardDefaults.cardElevation(4.dp),
-                onClick = {
-                    navigator.onNavigate(CollectionContent(collection.id))
-                },
+        ) { rowCollections ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        text = collection.title,
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.weight(1f),
-                    )
-                    if (!collection.isDefault) {
-                        IconButton(
-                            onClick = {
-                                viewModel.clearMutationErrors()
-                                collectionPendingDeletion = collection
-                            },
-                            enabled = !viewModel.isCreatingCollection && viewModel.deletingCollectionId == null,
-                            modifier = Modifier.testTag("collection_screen_delete_button_${collection.id}"),
+                rowCollections.forEach { collection ->
+                    Card(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(vertical = 8.dp)
+                            .testTag("collection_screen_item_${collection.id}"),
+                        elevation = CardDefaults.cardElevation(4.dp),
+                        onClick = {
+                            navigator.onNavigate(CollectionContent(collection.id))
+                        },
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            Icon(
-                                Icons.Filled.Delete,
-                                contentDescription = "删除${collection.title}",
-                                tint = MaterialTheme.colorScheme.error,
+                            Text(
+                                text = collection.title,
+                                style = MaterialTheme.typography.titleMedium,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f),
                             )
+                            if (!collection.isDefault) {
+                                IconButton(
+                                    onClick = {
+                                        viewModel.clearMutationErrors()
+                                        collectionPendingDeletion = collection
+                                    },
+                                    enabled = !viewModel.isCreatingCollection && viewModel.deletingCollectionId == null,
+                                    modifier = Modifier.testTag("collection_screen_delete_button_${collection.id}"),
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Delete,
+                                        contentDescription = "删除${collection.title}",
+                                        tint = MaterialTheme.colorScheme.error,
+                                    )
+                                }
+                            }
                         }
                     }
                 }
+                if (rowCollections.size == 1) Spacer(Modifier.weight(1f))
             }
         }
     }

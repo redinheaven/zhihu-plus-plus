@@ -31,7 +31,6 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.PaddingValues
@@ -40,7 +39,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -83,14 +81,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.compositeOver
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.input.pointer.PointerEventPass
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
@@ -142,12 +136,7 @@ import com.github.zly2006.zhihu.navigation.loginNavigationRequestFlow
 import com.github.zly2006.zhihu.platform.PlatformBackHandler
 import com.github.zly2006.zhihu.platform.platformName
 import com.github.zly2006.zhihu.platform.rememberSettingsStore
-import com.github.zly2006.zhihu.reading.rememberReadingPlayerController
-import com.github.zly2006.zhihu.reading.saveReadingPlaybackSpeed
-import com.github.zly2006.zhihu.ui.components.CompactReadingPlayerButton
 import com.github.zly2006.zhihu.ui.components.NoOpPagerNestedScrollConnection
-import com.github.zly2006.zhihu.ui.components.ReadingPlayerBar
-import com.github.zly2006.zhihu.ui.components.ReadingQueueSheet
 import com.github.zly2006.zhihu.ui.subscreens.AppearanceSettingsScreen
 import com.github.zly2006.zhihu.ui.subscreens.BlockedFeedHistoryScreen
 import com.github.zly2006.zhihu.ui.subscreens.ColorSchemeScreen
@@ -155,10 +144,8 @@ import com.github.zly2006.zhihu.ui.subscreens.ContentFilterSettingsScreen
 import com.github.zly2006.zhihu.ui.subscreens.DeveloperSettingsScreen
 import com.github.zly2006.zhihu.ui.subscreens.IdentityManagementScreen
 import com.github.zly2006.zhihu.ui.subscreens.OpenSourceLicensesScreen
-import com.github.zly2006.zhihu.ui.subscreens.ReadingSettingsScreen
 import com.github.zly2006.zhihu.ui.subscreens.SettingsSearchScreen
 import com.github.zly2006.zhihu.ui.subscreens.SystemAndUpdateSettingsScreen
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.reflect.KClass
 import kotlin.reflect.typeOf
@@ -182,8 +169,10 @@ private sealed class MainTabPage(
     data object AccountPage : MainTabPage(Account, "account")
 }
 
-internal val LocalReadingPlayerOverlayPadding = staticCompositionLocalOf { 0.dp }
 internal val LocalArticleNavController = staticCompositionLocalOf<NavHostController?> { null }
+
+/** 页面进出的横滑时长 */
+const val PAGE_TRANSITION_MS = 250
 
 /**
  * Zhihu++ 的共享应用主壳。
@@ -243,8 +232,6 @@ fun ZhihuMain(
     val selectedBottomBarItemKeys = preferenceState.selectedBottomBarItemKeys
     val startDestination = preferenceState.startDestination
     val reloadBottomBarPreferences = preferenceState::reload
-    val readingPlayer = rememberReadingPlayerController()
-    val readingPlayerState by readingPlayer.state
     val settings = rememberSettingsStore()
 
     /** 右侧详情独立持有返回栈；栏内导航保留上级，从左侧重新选项时清空。 */
@@ -253,10 +240,6 @@ fun ZhihuMain(
     val detailEntry by detailNavController.currentBackStackEntryAsState()
     val selectedContentDestination = detailEntry.readingDestinationOrNull()
     val hasOpenSecondaryDetail = detailEntry?.destination?.hasRoute<EmptyDetail>() == false
-    var showReadingQueue by remember { mutableStateOf(false) }
-    var isReadingPlayerExpandedByUser by remember { mutableStateOf(false) }
-    var readingPlayerHeightPx by remember { mutableIntStateOf(0) }
-    val readingPlayerOverlayOffsetState = remember { ReadingPlayerOverlayOffsetState() }
     val density = LocalDensity.current
     val currentOnMainTabDestinationChange by rememberUpdatedState(onCurrentMainTabDestinationChange)
 
@@ -287,67 +270,9 @@ fun ZhihuMain(
         navigateContent(destination, detailNavController)
     }
 
-    fun openReadingDestination(destination: NavDestination, onlyIfReading: Boolean = false) {
-        val current = if (hasOpenDetail) selectedContentDestination else navEntry.readingDestinationOrNull()
-        if (current == destination || (onlyIfReading && current == null)) return
-        val opensInDetail = useSecondaryContentNavigation && destination.isDetailPaneDestination()
-        if (hasOpenDetail) {
-            if (opensInDetail) {
-                detailNavController.popBackStack()
-            } else {
-                detailNavController.popBackStack(detailNavController.graph.startDestinationId, inclusive = false)
-            }
-        } else if (current != null && !opensInDetail) {
-            navController.popBackStack()
-        }
-        if (opensInDetail) {
-            detailOwnerEntryId = navController.currentBackStackEntry?.id
-            navigateContent(destination, detailNavController)
-        } else {
-            navigate(destination)
-        }
-    }
-    val isOnReadingDetail = hasOpenDetail ||
-        navEntry?.destination?.hasRoute<Article>() == true ||
-        navEntry?.destination?.hasRoute<Question>() == true ||
-        navEntry?.destination?.hasRoute<Pin>() == true
-    val isReadingPlayerExpanded = readingPlayerState.hasSession &&
-        (isOnReadingDetail || isReadingPlayerExpandedByUser)
-    val shouldCompactPlayerOnBackgroundInteraction by rememberUpdatedState(
-        isReadingPlayerExpandedByUser && !isOnReadingDetail,
-    )
-    val readingPlayerOverlayPadding = when {
-        !readingPlayerState.hasSession -> 0.dp
-        !isReadingPlayerExpanded -> 0.dp
-        readingPlayerHeightPx > 0 -> with(density) { readingPlayerHeightPx.toDp() } + 16.dp
-        else -> 16.dp
-    }
-
-    LaunchedEffect(readingPlayerState.hasSession) {
-        if (!readingPlayerState.hasSession) {
-            showReadingQueue = false
-            isReadingPlayerExpandedByUser = false
-            readingPlayerOverlayOffsetState.resetOffset()
-        }
-    }
-    var previousReadingItemKey by remember { mutableStateOf(readingPlayerState.currentItem?.key) }
-    LaunchedEffect(readingPlayerState.currentItem?.key) {
-        val currentItem = readingPlayerState.currentItem
-        val currentItemKey = currentItem?.key
-        val itemChanged = previousReadingItemKey != null && previousReadingItemKey != currentItemKey
-        previousReadingItemKey = currentItemKey
-        if (itemChanged && currentItem != null) {
-            openReadingDestination(currentItem.toDestination(readingPlayerState.sourceId), onlyIfReading = true)
-        }
-    }
-
     // 离开文章页时恢复系统状态栏（只在实际切换时触发）
     val isOnArticle = (hasOpenDetail && detailEntry?.destination?.hasRoute<Article>() == true) ||
         navEntry?.destination?.hasRoute<Article>() == true
-    LaunchedEffect(navEntry) {
-        isReadingPlayerExpandedByUser = false
-        if (!isOnArticle) readingPlayerOverlayOffsetState.clearRoute()
-    }
     var wasOnArticle by remember { mutableStateOf(false) }
     if (!isOnArticle && wasOnArticle) {
         LeaveImmersiveModeCleanup()
@@ -524,17 +449,15 @@ fun ZhihuMain(
                 onNavigateTopLevel = ::navigateTopLevel,
             ),
             LocalSelectedContentDestination provides selectedContentDestination,
-            LocalReadingPlayerOverlayPadding provides readingPlayerOverlayPadding,
-            LocalReadingPlayerOverlayOffsetState provides readingPlayerOverlayOffsetState,
         ) {
             NavHost(
                 navController = detailNavController,
                 startDestination = EmptyDetail,
                 modifier = modifier.testTag("detail_pane"),
-                enterTransition = { slideInHorizontally(tween(300)) { it } },
-                exitTransition = { ExitTransition.None },
-                popEnterTransition = { EnterTransition.None },
-                popExitTransition = { slideOutHorizontally(tween(300)) { it } + fadeOut(tween(300)) },
+                enterTransition = { slideInHorizontally(tween(PAGE_TRANSITION_MS)) { it } },
+                exitTransition = { slideOutHorizontally(tween(PAGE_TRANSITION_MS)) { -it / 5 } },
+                popEnterTransition = { slideInHorizontally(tween(PAGE_TRANSITION_MS)) { -it / 5 } },
+                popExitTransition = { slideOutHorizontally(tween(PAGE_TRANSITION_MS)) { it } + fadeOut(tween(PAGE_TRANSITION_MS)) },
             ) {
                 composable<EmptyDetail> {
                     EmptyDetailPane()
@@ -610,7 +533,6 @@ fun ZhihuMain(
                                         NavigationBarItem(
                                             currentBottomDestination?.let { it::class == destination::class } == true,
                                             onClick = {
-                                                isReadingPlayerExpandedByUser = false
                                                 if (currentBottomDestination?.let { it::class == destination::class } != true) {
                                                     navigateTopLevel(destination)
                                                 } else if (tapToScrollToTopEnabled) {
@@ -664,45 +586,23 @@ fun ZhihuMain(
                             onNavigateBack = navController::popBackStack,
                             onNavigateTopLevel = ::navigateTopLevel,
                         ),
-                        LocalReadingPlayerOverlayPadding provides readingPlayerOverlayPadding,
-                        LocalReadingPlayerOverlayOffsetState provides readingPlayerOverlayOffsetState,
                         LocalSelectedContentDestination provides selectedContentDestination,
                     ) {
                         NavHost(
                             navController,
-                            modifier = Modifier.pointerInput(Unit) {
-                                while (true) {
-                                    awaitPointerEventScope {
-                                        awaitFirstDown(
-                                            requireUnconsumed = false,
-                                            pass = PointerEventPass.Initial,
-                                        )
-                                        while (
-                                            awaitPointerEvent(PointerEventPass.Final)
-                                                .changes
-                                                .any { it.pressed }
-                                        ) {
-                                            // 等手势完成后再重组，避免取消同一次背景点击或滚动。
-                                        }
-                                    }
-                                    if (shouldCompactPlayerOnBackgroundInteraction) {
-                                        delay(100)
-                                        isReadingPlayerExpandedByUser = false
-                                    }
-                                }
-                            },
                             startDestination = MainTabs,
                             enterTransition = {
-                                slideInHorizontally(tween(300)) { it }
+                                slideInHorizontally(tween(PAGE_TRANSITION_MS)) { it }
                             },
+                            // 下层页面跟着轻微位移（视差），比静止不动更接近系统原生的切页手感
                             exitTransition = {
-                                ExitTransition.None
+                                slideOutHorizontally(tween(PAGE_TRANSITION_MS)) { -it / 5 }
                             },
                             popEnterTransition = {
-                                EnterTransition.None
+                                slideInHorizontally(tween(PAGE_TRANSITION_MS)) { -it / 5 }
                             },
                             popExitTransition = {
-                                slideOutHorizontally(tween(300)) { it } + fadeOut(tween(300))
+                                slideOutHorizontally(tween(PAGE_TRANSITION_MS)) { it } + fadeOut(tween(PAGE_TRANSITION_MS))
                             },
                         ) {
                             composable<MainTabs> {
@@ -868,83 +768,6 @@ fun ZhihuMain(
                 }
             }
         }
-
-        AnimatedVisibility(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(
-                    start = if (showListDetail && showDetailPane) listPaneWidth + LIST_DETAIL_DIVIDER_WIDTH else 0.dp,
-                    bottom = bottomPadding + 16.dp + if (
-                        !showDetailPane && showMainNavigation && showMainNavigationBar && (!autoHideBottomBar || isBottomBarVisible)
-                    ) {
-                        64.dp
-                    } else {
-                        0.dp
-                    },
-                ).fillMaxWidth(),
-            visible = isReadingPlayerExpanded,
-            enter = fadeIn(tween(220)) + scaleIn(tween(220), initialScale = 0.92f),
-            exit = fadeOut(tween(160)) + scaleOut(tween(160), targetScale = 0.92f),
-        ) {
-            ReadingPlayerBar(
-                state = readingPlayerState,
-                onPrevious = readingPlayer::playPrevious,
-                onTogglePlayPause = readingPlayer::togglePlayPause,
-                onNext = readingPlayer::playNext,
-                onStop = readingPlayer::stop,
-                onOpenQueue = { showReadingQueue = true },
-                onPlaybackSpeedChange = { speed ->
-                    saveReadingPlaybackSpeed(settings, speed)
-                    readingPlayer.setPlaybackSpeed(speed)
-                },
-                onBackgroundInteraction = {
-                    if (!isOnReadingDetail) isReadingPlayerExpandedByUser = false
-                },
-                modifier = Modifier
-                    .onSizeChanged { readingPlayerHeightPx = it.height }
-                    .graphicsLayer {
-                        translationY = readingPlayerOverlayOffsetState.verticalOffsetPx
-                    },
-            )
-        }
-
-        AnimatedVisibility(
-            visible = readingPlayerState.hasSession && !isReadingPlayerExpanded,
-            enter = fadeIn(tween(220)),
-            exit = fadeOut(tween(160)),
-        ) {
-            Box(modifier = Modifier.fillMaxSize()) {
-                CompactReadingPlayerButton(
-                    state = readingPlayerState,
-                    onExpand = { isReadingPlayerExpandedByUser = true },
-                )
-            }
-        }
-    }
-
-    if (showReadingQueue && readingPlayerState.hasSession) {
-        ReadingQueueSheet(
-            state = readingPlayerState,
-            onDismissRequest = {
-                showReadingQueue = false
-                if (!isOnReadingDetail) isReadingPlayerExpandedByUser = false
-            },
-            onItemClick = { index, item ->
-                previousReadingItemKey = item.key
-                if (index != readingPlayerState.currentIndex) {
-                    readingPlayer.playAt(index)
-                }
-                showReadingQueue = false
-                openReadingDestination(item.toDestination(readingPlayerState.sourceId))
-            },
-            onOpenSettings = {
-                showReadingQueue = false
-                isReadingPlayerExpandedByUser = false
-                if (navEntry?.destination?.hasRoute<Account.ReadingSettings>() != true) {
-                    navigate(Account.ReadingSettings)
-                }
-            },
-        )
     }
 }
 
@@ -1056,7 +879,6 @@ private fun NavBackStackEntry?.readingDestinationOrNull(): NavDestination? = whe
 
 private fun NavDestination.isAccountDetailDestination(): Boolean = when (this) {
     is Account.AppearanceSettings,
-    Account.ReadingSettings,
     is Account.RecommendSettings,
     Account.RecommendSettings.Blocklist,
     Account.RecommendSettings.BlockedFeedHistory,
@@ -1115,9 +937,6 @@ private fun NavGraphBuilder.accountSettings(
         SystemAndUpdateSettingsScreen(
             setting = entry.toRoute<Account.SystemAndUpdateSettings>().setting,
         )
-    }
-    composable<Account.ReadingSettings> {
-        ReadingSettingsScreen()
     }
     composable<Account.SettingsSearch> {
         SettingsSearchScreen()

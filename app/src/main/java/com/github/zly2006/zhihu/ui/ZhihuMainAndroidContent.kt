@@ -18,7 +18,6 @@
 package com.github.zly2006.zhihu.ui
 
 import androidx.activity.compose.LocalActivity
-import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -69,7 +68,7 @@ fun AndroidZhihuMain(navController: NavHostController) {
                     slideInHorizontally(tween(300)) { it } + fadeIn(tween(300))
                 ArticleAnswerTransitionDirection.HORIZONTAL_PREVIOUS ->
                     slideInHorizontally(tween(300)) { -it } + fadeIn(tween(300))
-                else -> slideInHorizontally(tween(300)) { it }
+                else -> slideInHorizontally(tween(PAGE_TRANSITION_MS)) { it }
             }
         },
         articleExitTransition = {
@@ -82,7 +81,7 @@ fun AndroidZhihuMain(navController: NavHostController) {
                     slideOutHorizontally(tween(300)) { -it } + fadeOut(tween(300))
                 ArticleAnswerTransitionDirection.HORIZONTAL_PREVIOUS ->
                     slideOutHorizontally(tween(300)) { it } + fadeOut(tween(300))
-                else -> ExitTransition.None
+                else -> slideOutHorizontally(tween(PAGE_TRANSITION_MS)) { -it / 5 }
             }
         },
         articleContent = { article, navEntry ->

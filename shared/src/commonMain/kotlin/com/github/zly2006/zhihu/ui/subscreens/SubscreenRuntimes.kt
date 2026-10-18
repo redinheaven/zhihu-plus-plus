@@ -18,7 +18,6 @@
 package com.github.zly2006.zhihu.ui.subscreens
 
 import androidx.compose.runtime.Composable
-import com.github.zly2006.zhihu.ui.TtsState
 
 expect val isWebViewCustomFontSupported: Boolean
 
@@ -40,9 +39,6 @@ expect fun CloudFileSyncSettings()
 data class DeveloperInfoSnapshot(
     val networkStatus: String = "网络状态：未知",
     val powerSaveModeText: String? = null,
-    val ttsState: TtsState = TtsState.Uninitialized,
-    val currentTtsEngineLabel: String = "未初始化",
-    val availableTtsEngineLabels: List<String> = emptyList(),
 )
 
 @Composable

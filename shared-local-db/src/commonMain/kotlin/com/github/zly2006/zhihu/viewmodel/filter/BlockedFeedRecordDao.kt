@@ -29,7 +29,7 @@ interface BlockedFeedRecordDao {
     fun observeAll(): Flow<List<BlockedFeedRecord>>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insert(record: BlockedFeedRecord): Long
+    suspend fun insertAll(records: List<BlockedFeedRecord>)
 
     @Query("DELETE FROM ${BlockedFeedRecord.TABLE_NAME} WHERE id = :id")
     suspend fun deleteById(id: Long)

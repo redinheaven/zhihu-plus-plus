@@ -78,7 +78,6 @@ import com.github.zly2006.zhihu.navigation.Person
 import com.github.zly2006.zhihu.platform.UserMessageDuration
 import com.github.zly2006.zhihu.platform.rememberSettingsStore
 import com.github.zly2006.zhihu.platform.rememberUserMessageSink
-import com.github.zly2006.zhihu.reading.RegisterReadingQueueSource
 import com.github.zly2006.zhihu.ui.TopLevelReselectAction
 import com.github.zly2006.zhihu.ui.components.BlockTopicMenuItems
 import com.github.zly2006.zhihu.ui.components.DraggableRefreshButton
@@ -348,13 +347,6 @@ fun FollowRecommendScreen(
     isActive: Boolean = true,
 ) {
     val viewModel: FollowRecommendViewModel = viewModel { FollowRecommendViewModel() }
-    val readingQueueSourceId = "follow:recommend"
-    if (isActive) {
-        RegisterReadingQueueSource(
-            sourceId = readingQueueSourceId,
-            items = viewModel.displayItems,
-        )
-    }
     val environment = rememberPaginationEnvironment(allowGuestAccess = viewModel.allowGuestAccess)
     val settings = rememberSettingsStore()
     val userMessages = rememberUserMessageSink()
@@ -413,7 +405,6 @@ fun FollowRecommendScreen(
             ) { item ->
                 FeedCard(
                     item = item,
-                    readingQueueSourceId = readingQueueSourceId.takeIf { isActive },
                     modifier = Modifier.testTag("follow_recommend_item_${item.stableKey}"),
                     menuItems = { dismissMenu ->
                         DropdownMenuItem(
@@ -487,13 +478,6 @@ fun FollowDynamicScreen(
     isActive: Boolean = true,
 ) {
     val viewModel: FollowViewModel = viewModel { FollowViewModel() }
-    val readingQueueSourceId = "follow:dynamic"
-    if (isActive) {
-        RegisterReadingQueueSource(
-            sourceId = readingQueueSourceId,
-            items = viewModel.displayItems,
-        )
-    }
     val environment = rememberPaginationEnvironment(allowGuestAccess = viewModel.allowGuestAccess)
     val settings = rememberSettingsStore()
     val userMessages = rememberUserMessageSink()
@@ -552,7 +536,6 @@ fun FollowDynamicScreen(
             ) { item ->
                 FeedCard(
                     item = item,
-                    readingQueueSourceId = readingQueueSourceId.takeIf { isActive },
                     modifier = Modifier.testTag("follow_dynamic_item_${item.stableKey}"),
                     showSourceLabel = true,
                     menuItems = { dismissMenu ->

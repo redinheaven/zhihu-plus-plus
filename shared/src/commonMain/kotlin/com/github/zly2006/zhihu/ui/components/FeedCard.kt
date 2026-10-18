@@ -33,7 +33,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -87,7 +86,6 @@ import com.github.zly2006.zhihu.navigation.LocalNavigator
 import com.github.zly2006.zhihu.navigation.NavDestination
 import com.github.zly2006.zhihu.navigation.Navigator
 import com.github.zly2006.zhihu.navigation.Person
-import com.github.zly2006.zhihu.navigation.withReadingQueueSource
 import com.github.zly2006.zhihu.platform.UserMessageDuration
 import com.github.zly2006.zhihu.platform.rememberSettingsStore
 import com.github.zly2006.zhihu.platform.rememberUserMessageSink
@@ -97,6 +95,8 @@ import com.github.zly2006.zhihu.ui.subscreens.PREF_LINE_HEIGHT
 import com.github.zly2006.zhihu.util.parseEmphasizedHtmlTextWithTheme
 import com.github.zly2006.zhihu.viewmodel.QUALITY_FILTER_MODE_PREFERENCE_KEY
 import com.github.zly2006.zhihu.viewmodel.filter.getContentFilterDatabase
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 
 /**
  * 信息流卡片的 Material 3 实现。
@@ -112,7 +112,6 @@ import com.github.zly2006.zhihu.viewmodel.filter.getContentFilterDatabase
 fun FeedCard(
     item: FeedDisplayItem,
     modifier: Modifier = Modifier,
-    readingQueueSourceId: String? = null,
     maxHeight: Dp = 240.dp,
     thumbnailUrl: String? = null,
     horizontalPadding: Dp = 16.dp,
@@ -146,7 +145,7 @@ fun FeedCard(
     val isSelected = item.navDestination != null && item.navDestination == selectedDestination
     val selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f)
     val performClick: (FeedDisplayItem) -> Unit = { clickedItem ->
-        val destination = clickedItem.navDestination?.withReadingQueueSource(readingQueueSourceId)
+        val destination = clickedItem.navDestination
         if (onClick != null) {
             onClick(clickedItem, destination)
         } else {
@@ -272,13 +271,6 @@ private fun FeedCardMenuBox(
             onDismissRequest = { onShowMenuChange(false) },
         ) {
             menuItems { onShowMenuChange(false) }
-            DropdownMenuItem(
-                text = { Text("外观设置") },
-                onClick = {
-                    onShowMenuChange(false)
-                    navigator.onNavigate(Account.AppearanceSettings())
-                },
-            )
             if (item.isQualityFiltered) {
                 DropdownMenuItem(
                     text = { Text("调整质量屏蔽") },
@@ -331,12 +323,16 @@ private fun FeedCardContent(
     val authorId = authorPerson?.id
     val authorClickModifier = if (authorPerson != null) Modifier.clickable { navigator.onNavigate(authorPerson) } else Modifier
     // 读过的内容在详情行前标出上次阅读时间
-    val readIdentity = remember(item) { item.navDestination?.let(ContentOpenEventSupport::toTrackedContentIdentity) }
-    val lastOpenedTimes by ContentOpenEventSupport.lastOpenedAt.collectAsState()
+    val readKey = remember(item) {
+        item.navDestination?.let(ContentOpenEventSupport::toTrackedContentIdentity)?.let { "${it.type}:${it.id}" }
+    }
+    // 只订阅本卡片那一项：打开内容、同步浏览历史时整表会变，不让所有可见卡片一起重组
+    val lastReadAt by remember(readKey) {
+        ContentOpenEventSupport.lastOpenedAt.map { times -> readKey?.let { times?.get(it) } }.distinctUntilChanged()
+    }.collectAsState(readKey?.let { ContentOpenEventSupport.lastOpenedAt.value?.get(it) })
     LaunchedEffect(Unit) {
         runCatching { ContentOpenEventSupport.ensureLastOpenedAtLoaded(getContentFilterDatabase()) }
     }
-    val lastReadAt = readIdentity?.let { lastOpenedTimes?.get("${it.type}:${it.id}") }
     val readLabelColor = MaterialTheme.colorScheme.primary
     val detailsText = buildAnnotatedString {
         lastReadAt?.takeUnless { item.isFiltered }?.let { openedAt ->
@@ -391,9 +387,9 @@ private fun FeedCardContent(
                         contentDescription = "Thumbnail",
                         modifier = Modifier
                             .padding(top = 8.dp)
-                            .sizeIn(maxHeight = 80.dp, maxWidth = 128.dp)
+                            .size(width = 106.dp, height = 80.dp)
                             .clip(RoundedCornerShape(8.dp)),
-                        contentScale = ContentScale.FillHeight,
+                        contentScale = ContentScale.Crop,
                     )
                 }
             }
@@ -457,6 +453,15 @@ private fun FeedCardContent(
                             )
                         }
                     }
+                    item.wordCount?.let {
+                        Text(
+                            text = "${it}字",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            modifier = Modifier.padding(horizontal = 4.dp),
+                        )
+                    }
                     if (item.details.isNotEmpty()) {
                         FeedCardMenuBox(item, showMenu, onShowMenuChange, menuItems, navigator)
                     }
@@ -485,29 +490,44 @@ private fun FeedCardContent(
             Spacer(Modifier.height(4.dp))
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = authorClickModifier,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth(),
             ) {
-                AsyncImage(
-                    model = avatarSrc,
-                    contentDescription = "Avatar",
-                    modifier = Modifier
-                        .clip(CircleShape)
-                        .size(20.dp),
-                )
-                Spacer(Modifier.width(8.dp))
-                Text(
-                    text = authorName,
-                    fontSize = 14.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f, fill = false),
-                )
-                AuthorNoteText(authorId, authorName, TextStyle(fontSize = 14.sp))
-                val authorBadge = item.authorBadgeV2.officialBadge()
-                if (authorBadge?.isUsefulInList == true) {
-                    Spacer(Modifier.width(4.dp))
-                    AuthorBadge(authorBadge, compact = true)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f, fill = false).then(authorClickModifier),
+                ) {
+                    AsyncImage(
+                        model = avatarSrc,
+                        contentDescription = "Avatar",
+                        modifier = Modifier
+                            .clip(CircleShape)
+                            .size(20.dp),
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        text = authorName,
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    AuthorNoteText(authorId, authorName, TextStyle(fontSize = 14.sp))
+                    val authorBadge = item.authorBadgeV2.officialBadge()
+                    if (authorBadge?.isUsefulInList == true) {
+                        Spacer(Modifier.width(4.dp))
+                        AuthorBadge(authorBadge, compact = true)
+                    }
+                }
+                item.wordCount?.let {
+                    Text(
+                        text = "${it}字",
+                        fontSize = 14.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        modifier = Modifier.padding(start = 8.dp),
+                    )
                 }
             }
         }
@@ -543,12 +563,13 @@ private fun FeedCardContent(
             }
             if (!thumbnailUrl.isNullOrEmpty() && showFeedThumbnail) {
                 Spacer(modifier = Modifier.width(8.dp))
+                // 固定尺寸：图片加载前后卡片高度不变，滑动时不跳
                 AsyncImage(
                     model = thumbnailUrl,
                     contentDescription = "Thumbnail",
+                    contentScale = ContentScale.Crop,
                     modifier = Modifier
-                        .weight(1f)
-                        .sizeIn(maxWidth = 60.dp)
+                        .size(60.dp)
                         .clip(RoundedCornerShape(8.dp)),
                 )
             }

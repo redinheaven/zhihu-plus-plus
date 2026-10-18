@@ -68,6 +68,7 @@ fun CommentScreenComponent(
     onDismiss: () -> Unit,
     content: NavDestination,
     isZhPlusAuthorContent: Boolean = false,
+    contentTitle: String = "",
 ) {
     val settings = rememberSettingsStore()
     val initialPendingCommentId = consumePendingCommentId(content)
@@ -157,6 +158,7 @@ fun CommentScreenComponent(
             usePlatformWindow = content !is Article,
         ) {
             CommentScreen(
+                contentTitle = contentTitle,
                 content = { content },
                 initialCommentId = pendingCommentId,
                 onChildCommentClick = { commentItem ->
@@ -198,6 +200,7 @@ fun CommentScreenComponent(
             usePlatformWindow = childTarget.article !is Article,
         ) {
             CommentScreen(
+                contentTitle = contentTitle,
                 content = { childTarget },
                 activeCommentItem = activeChildComment,
                 onChildCommentClick = { },

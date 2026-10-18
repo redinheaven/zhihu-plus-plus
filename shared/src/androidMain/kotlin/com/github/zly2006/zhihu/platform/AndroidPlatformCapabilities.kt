@@ -187,6 +187,12 @@ actual fun rememberAppPrivateDirectory(): Path {
     return remember(context) { Path(context.filesDir.absolutePath) }
 }
 
+@Composable
+actual fun rememberUserFileDirectory(): Path {
+    val context = LocalContext.current.applicationContext
+    return remember(context) { Path((context.getExternalFilesDir(null) ?: context.filesDir).absolutePath) }
+}
+
 fun androidSettingsStore(context: Context): SettingsStore {
     val preferences = context.applicationContext.getSharedPreferences(PREFERENCE_NAME, Context.MODE_PRIVATE)
     return object : SettingsStore {

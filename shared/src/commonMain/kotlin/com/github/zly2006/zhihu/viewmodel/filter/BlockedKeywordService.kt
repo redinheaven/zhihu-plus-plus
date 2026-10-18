@@ -33,7 +33,6 @@ fun interface KeywordSemanticMatcher {
  * 负责屏蔽词和 NLP 屏蔽记录的数据库语义；具体语义相似度算法通过 [semanticMatcher] 注入。
  */
 class BlockedKeywordService(
-    private val keywordDao: BlockedKeywordDao,
     private val recordDao: BlockedContentRecordDao,
     private val semanticMatcher: KeywordSemanticMatcher?,
 ) {
@@ -42,7 +41,8 @@ class BlockedKeywordService(
      * 使用标题、摘要和正文纯文本参与匹配。
      * @param title 标题
      * @param excerpt 摘要
-     * @param content 正文内容，当前保留给后续扩展
+     * @param content 正文纯文本
+     * @param phrases 要匹配的 NLP 屏蔽主题，由调用方每批查一次传入
      * @param threshold 相似度阈值，默认 0.8
      * @return Pair<是否屏蔽, 匹配的关键词列表>
      */
@@ -50,17 +50,10 @@ class BlockedKeywordService(
         title: String,
         excerpt: String?,
         content: String?,
+        phrases: List<String>,
         threshold: Double = 0.8,
     ): Pair<Boolean, List<MatchedKeywordInfo>> {
-        if (title.isBlank()) return Pair(false, emptyList())
-
-        val nlpKeywords = keywordDao
-            .getAllKeywords()
-            .filter { it.getKeywordTypeEnum() == KeywordType.NLP_SEMANTIC }
-        if (nlpKeywords.isEmpty()) return Pair(false, emptyList())
-
-        // 获取所有 NLP 短语
-        val phrases = nlpKeywords.map { it.keyword }
+        if (title.isBlank() || phrases.isEmpty()) return Pair(false, emptyList())
 
         val weightedText = buildString {
             append(title)

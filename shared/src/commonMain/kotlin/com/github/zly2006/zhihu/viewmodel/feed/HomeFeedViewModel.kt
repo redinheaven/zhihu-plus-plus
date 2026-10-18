@@ -30,6 +30,7 @@ import com.github.zly2006.zhihu.navigation.Article
 import com.github.zly2006.zhihu.navigation.Question
 import com.github.zly2006.zhihu.util.Log
 import com.github.zly2006.zhihu.viewmodel.ContentInteractionEnvironment
+import com.github.zly2006.zhihu.viewmodel.DEBUG_DATA_MAX
 import com.github.zly2006.zhihu.viewmodel.HomeFeedFilterResult
 import com.github.zly2006.zhihu.viewmodel.PaginationEnvironment
 import com.github.zly2006.zhihu.viewmodel.QualityFilterMode
@@ -40,8 +41,6 @@ import io.ktor.client.request.forms.MultiPartFormDataContent
 import io.ktor.client.request.forms.formData
 import io.ktor.client.request.header
 import io.ktor.client.request.setBody
-import io.ktor.client.statement.bodyAsText
-import io.ktor.http.isSuccess
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
@@ -156,8 +155,6 @@ interface HomeFeedInteractionViewModel {
 class HomeFeedViewModel :
     BaseFeedViewModel(),
     HomeFeedInteractionViewModel {
-    private val reportedTouchedItems = hashSetOf<Pair<String, String>>()
-
     override val initialUrl: String
 //        get() = "https://www.zhihu.com/api/v3/feed/topstory/recommend?desktop=true&limit=10"
         get() = "https://api.zhihu.com/topstory/recommend"
@@ -185,7 +182,6 @@ class HomeFeedViewModel :
     override fun switchHostAfterResolutionFailure(): Boolean = !useWebHost.also { useWebHost = true }
 
     public override suspend fun fetchFeeds(environment: PaginationEnvironment) {
-        markItemsAsTouched(environment)
         super.fetchFeeds(environment)
         if (errorMessage != null) showOfflineItemsIfEmpty(environment)
     }
@@ -194,8 +190,10 @@ class HomeFeedViewModel :
     override fun processResponse(environment: PaginationEnvironment, data: List<Feed>, rawData: JsonArray) {
         allData.addAll(data)
         debugData.addAll(rawData)
+        if (debugData.size > DEBUG_DATA_MAX) debugData.subList(0, debugData.size - DEBUG_DATA_MAX).clear()
 
-        viewModelScope.launch {
+        // 排序、过滤和后台过滤里的详情解码都是 CPU 活，放到后台线程，只有改列表时切回主线程
+        viewModelScope.launch(Dispatchers.Default) {
             val feeds = data.flattenFeeds()
             val loadedItems = if (environment.feedDisplaySettings().sortByPublishTime) {
                 // 外层 created_time 是请求时刻，target.created_time 才是发布时间；缺失的排到本页末尾
@@ -219,7 +217,7 @@ class HomeFeedViewModel :
 
             val filteredItems = environment.applyBackgroundHomeFeedFilter(foregroundItems)
             if (reverseBlock) {
-                addDisplayItems(filteredItems)
+                withContext(Dispatchers.Main) { addDisplayItems(filteredItems) }
             }
 
             val filterResult = HomeFeedFilterResult(
@@ -230,7 +228,7 @@ class HomeFeedViewModel :
 
             // 移除被过滤的条目，并更新已保留条目的 raw 内容
             withContext(Dispatchers.Main) {
-                displayItems.replaceHomeFeedItemsWithFilteredResult(filterResult)
+                listSync.pendingRemovalKeys += displayItems.replaceHomeFeedItemsWithFilteredResult(filterResult, listSync.visibleItemKeys)
                 latestLoadedDisplayItems.value = filterResult.filteredItems
                 completedPageCount++
             }
@@ -277,52 +275,5 @@ class HomeFeedViewModel :
             }
             recordContentInteraction(environment, feed)
         }
-    }
-
-    private suspend fun markItemsAsTouched(
-        environment: ContentInteractionEnvironment,
-    ) {
-        try {
-            if (environment.authenticatedCookies()["d_c0"] == null) return
-            val currentTouchItems = displayItems
-                .asSequence()
-                .filterNot { it.isFiltered }
-                .mapNotNull { it.feed?.target }
-                .mapNotNull { target ->
-                    when (target) {
-                        is Feed.AnswerTarget -> "answer" to target.id.toString()
-                        is Feed.ArticleTarget -> "article" to target.id.toString()
-                        is Feed.PinTarget -> "pin" to target.id.toString()
-                        else -> null
-                    }
-                }.toList()
-            val untouchedItemSet = currentTouchItems - reportedTouchedItems
-
-            if (untouchedItemSet.isNotEmpty()) {
-                val payload = untouchedItemSet.map { (type, id) -> listOf(type, id, "touch") }
-                val response = environment.postSigned("https://www.zhihu.com/lastread/touch") {
-                    header("x-requested-with", "fetch")
-                    setBody(
-                        MultiPartFormDataContent(
-                            formData {
-                                append("items", ZhihuJson.json.encodeToString(payload))
-                            },
-                        ),
-                    )
-                }
-                if (response.status.isSuccess()) {
-                    reportedTouchedItems.addAll(untouchedItemSet)
-                } else {
-                    Log.e("Browse-Touch", response.bodyAsText())
-                }
-            }
-        } catch (e: Exception) {
-            environment.handleFetchFailure("FeedViewModel", e)
-        }
-    }
-
-    override fun refresh(environment: PaginationEnvironment) {
-        super.refresh(environment)
-        reportedTouchedItems.clear()
     }
 }

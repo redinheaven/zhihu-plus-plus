@@ -22,8 +22,6 @@ import androidx.compose.runtime.remember
 import com.github.zly2006.zhihu.platform.nativeBundledResourcePath
 import com.github.zly2006.zhihu.platform.nativeIsDesktop
 import com.github.zly2006.zhihu.platform.platformName
-import com.github.zly2006.zhihu.ui.NativeArticleSpeechController
-import com.github.zly2006.zhihu.ui.TtsState
 import com.mikepenz.aboutlibraries.Libs
 import kotlinx.cinterop.ByteVar
 import kotlinx.cinterop.ExperimentalForeignApi
@@ -39,9 +37,6 @@ actual fun rememberDeveloperInfo(): DeveloperInfoSnapshot =
         } else {
             "网络状态：iOS 端使用系统网络"
         },
-        ttsState = if (nativeIsDesktop) NativeArticleSpeechController.currentState else TtsState.Uninitialized,
-        currentTtsEngineLabel = if (nativeIsDesktop) "macOS 系统语音" else "未初始化",
-        availableTtsEngineLabels = if (nativeIsDesktop) listOf("NSSpeechSynthesizer") else emptyList(),
     )
 
 @Composable

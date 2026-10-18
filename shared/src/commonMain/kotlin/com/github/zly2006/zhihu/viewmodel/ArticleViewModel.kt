@@ -32,6 +32,7 @@ import com.github.zly2006.zhihu.data.DataHolder
 import com.github.zly2006.zhihu.data.OfficialBadge
 import com.github.zly2006.zhihu.data.VoteUpState
 import com.github.zly2006.zhihu.data.ZhihuJson
+import com.github.zly2006.zhihu.data.cachedContentDetail
 import com.github.zly2006.zhihu.data.decodeZhihuCommentData
 import com.github.zly2006.zhihu.data.officialBadge
 import com.github.zly2006.zhihu.markdown.htmlToMdAst
@@ -100,7 +101,12 @@ class ArticleViewModel(
     var authorUrlToken by mutableStateOf("")
     var authorName by mutableStateOf("")
     var authorBio by mutableStateOf("")
-    var authorAvatarSrc by mutableStateOf("")
+
+    /**
+     * 本 fork：先用列表卡片带过来的头像，详情里的头像 URL 尺寸可能不同，换过去会重新加载、闪一下；
+     * 卡片没带头像时才用详情的
+     */
+    var authorAvatarSrc by mutableStateOf(article.avatarSrc.orEmpty())
     var authorBadge by mutableStateOf<OfficialBadge?>(null)
     var content by mutableStateOf("")
     var attachment by mutableStateOf<JsonElement?>(null)
@@ -207,8 +213,8 @@ class ArticleViewModel(
                 try {
                     if (article.type == ArticleType.Answer) {
                         val sharedData = sharedArticleAnswerSwitchState
-                        val answer = environment.fetchContentDetail(article) as? DataHolder.Answer
-                        if (answer != null) {
+
+                        fun show(answer: DataHolder.Answer) {
                             exportSourceContent = answer
                             title = answer.question.title
                             authorName = answer.author.name
@@ -229,7 +235,7 @@ class ArticleViewModel(
                             }
                             attachment = answer.attachment
                             authorBio = answer.author.headline
-                            authorAvatarSrc = answer.author.avatarUrl
+                            authorAvatarSrc = authorAvatarSrc.ifEmpty { answer.author.avatarUrl }
                             authorBadge = answer.author.badgeV2.officialBadge()
                             voteUpCount = answer.voteupCount
                             votersTotal = answer.voteupCount
@@ -242,7 +248,14 @@ class ArticleViewModel(
                             ipInfo = answer.ipInfo
                             endorsements = answer.endorsementItems
                             topics = emptyList()
+                        }
 
+                        // 首页过滤或预取时多半已拉过这条详情：先用缓存（内存或离线正文）立刻显示，联网拿到最新的（赞数、评论数等）再覆盖
+                        val cached = cachedContentDetail(article) as? DataHolder.Answer
+                        cached?.let(::show)
+                        val answer = environment.fetchContentDetail(article) as? DataHolder.Answer ?: cached
+                        if (answer != null) {
+                            if (answer !== cached) show(answer)
                             environment.postHistoryDestination(
                                 Article(
                                     id = answer.id,
@@ -291,8 +304,7 @@ class ArticleViewModel(
                             Log.e("ArticleViewModel", "Answer not found")
                         }
                     } else if (article.type == ArticleType.Article) {
-                        val article = environment.fetchContentDetail(article) as? DataHolder.Article
-                        if (article != null) {
+                        fun show(article: DataHolder.Article) {
                             endorsements = emptyList()
                             exportSourceContent = article
                             title = article.title
@@ -304,14 +316,20 @@ class ArticleViewModel(
                             authorUrlToken = article.author.urlToken
                             authorName = article.author.name
                             authorBio = article.author.headline
-                            authorAvatarSrc = article.author.avatarUrl
+                            authorAvatarSrc = authorAvatarSrc.ifEmpty { article.author.avatarUrl }
                             authorBadge = article.author.badgeV2.officialBadge()
                             voteUpState = VoteUpState.from(article.reaction?.relation?.vote)
                             updatedAt = article.updated
                             createdAt = article.created
                             ipInfo = article.ipInfo
                             topics = article.topics.orEmpty()
+                        }
 
+                        val cached = cachedContentDetail(article) as? DataHolder.Article
+                        cached?.let(::show)
+                        val article = environment.fetchContentDetail(article) as? DataHolder.Article ?: cached
+                        if (article != null) {
+                            if (article !== cached) show(article)
                             environment.postHistoryDestination(
                                 Article(
                                     id = article.id,

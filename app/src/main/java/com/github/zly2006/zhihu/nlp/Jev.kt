@@ -45,6 +45,9 @@ import java.util.Locale
 private const val TAG = "Jev"
 private val client = HttpClient(Android)
 
+/** 控制费用：开头部分足够判断主题；clef-flash 实测也只读开头约 2k token（约 3000 个汉字） */
+private const val JEV_STATE_MAX_CHARS = 3000
+
 const val PREF_TYPESAFE_API_KEY = "typesafeApiKey"
 const val PREF_CF_ACCOUNT_ID = "cloudflareAccountId"
 const val PREF_CF_API_TOKEN = "cloudflareApiToken"
@@ -77,8 +80,7 @@ private suspend fun askJev(
     if (instructions.isEmpty()) return null
 
     fun body(model: String) = buildJsonObject {
-        // 控制费用：开头部分足够判断主题；clef-flash 实测也只读开头约 2k token（约 3000 个汉字）
-        put("state", state.take(3000))
+        put("state", state.take(JEV_STATE_MAX_CHARS))
         put("model", model)
         putJsonObject("questions") {
             instructions.forEachIndexed { i, instruction ->
@@ -127,6 +129,14 @@ private suspend fun askJev(
 class JevKeywordSemanticMatcher(
     private val settings: SettingsStore,
 ) : KeywordSemanticMatcher {
+    /**
+     * 同一内容在下拉刷新、关注页、离线列表重新过滤时不重复问 Jev：以发给 Jev 的文本为键缓存每个主题的概率，
+     * 只问缓存里没有的主题（新加主题时旧主题不重问）。只存本进程内存，最多 500 条内容。
+     */
+    private val scoreCache = object : LinkedHashMap<String, Map<String, Double>>(64, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Map<String, Double>>) = size > 500
+    }
+
     override suspend fun checkBlockedPhrases(
         text: String,
         blockedPhrases: List<String>,
@@ -134,15 +144,23 @@ class JevKeywordSemanticMatcher(
     ): List<Pair<String, Double>> {
         val keys = JevKeys(settings)
         if (text.isBlank() || !keys.isConfigured) return emptyList()
-        val scores = askJev(
-            keys = keys,
-            state = text,
-            instructions = blockedPhrases.map { "这条知乎内容的主要话题属于「$it」" },
-            criteriaTrue = "内容主要在讨论该话题，或该话题是内容的重要组成部分",
-            criteriaFalse = "内容与该话题无关，或只是顺带提及",
-        ) ?: return emptyList()
+        val state = text.take(JEV_STATE_MAX_CHARS)
+        val cached = synchronized(scoreCache) { scoreCache[state] }.orEmpty()
+        val missing = blockedPhrases.filterNot { it in cached }
+        val scores = if (missing.isEmpty()) {
+            cached
+        } else {
+            val fresh = askJev(
+                keys = keys,
+                state = state,
+                instructions = missing.map { "这条知乎内容的主要话题属于「$it」" },
+                criteriaTrue = "内容主要在讨论该话题，或该话题是内容的重要组成部分",
+                criteriaFalse = "内容与该话题无关，或只是顺带提及",
+            )?.let { missing.zip(it).toMap() }.orEmpty()
+            (cached + fresh).also { merged -> if (fresh.isNotEmpty()) synchronized(scoreCache) { scoreCache[state] = merged } }
+        }
         return blockedPhrases
-            .zip(scores)
+            .mapNotNull { phrase -> scores[phrase]?.let { phrase to it } }
             .filter { it.second >= threshold }
             .sortedByDescending { it.second }
     }

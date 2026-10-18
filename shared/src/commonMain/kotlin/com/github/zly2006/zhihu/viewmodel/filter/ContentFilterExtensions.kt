@@ -72,7 +72,6 @@ class ForegroundReadFilterPipeline(
 
             if (isFollowing || (!isViewed && !isLowQualityAndroidFeed)) {
                 keptItems.add(item)
-                contentFilterManager.recordContentView(identity.type, identity.id)
             } else {
                 blockedItems.add(
                     item.toFilterableContent(identity, DataHolder.DummyContent) to "已读过且未关注作者",
@@ -85,6 +84,12 @@ class ForegroundReadFilterPipeline(
         }
 
         return keptItems
+    }
+
+    /** 卡片真正滚进屏幕时记为已展示，以后再推就被 [filter] 去掉；加载了但没划到的不记，以后还能被推回来 */
+    suspend fun recordViews(items: List<FeedDisplayItem>) {
+        if (settings.reverseBlock || !settings.enableContentFilter) return
+        items.forEach { item -> item.resolveContentIdentity().let { contentFilterManager.recordContentView(it.type, it.id) } }
     }
 }
 
@@ -137,24 +142,34 @@ class FeedContentFilterPipeline(
             filteredContents = kept
         }
 
+        val allKeywords = if (settings.enableKeywordBlocking || settings.enableNlpBlocking) {
+            blockedKeywordDao.getAllKeywords()
+        } else {
+            emptyList()
+        }
+
         if (settings.enableKeywordBlocking) {
-            val exactKeywords = blockedKeywordDao
-                .getAllKeywords()
+            // 正则每批只编译一次，不在每张卡片、每个字段上重复编译
+            val exactMatchers = allKeywords
                 .filter { it.getKeywordTypeEnum() == KeywordType.EXACT_MATCH }
+                .map { it.getKeywordScopeEnum() to it.matcher() }
             val (kept, removed) = filteredContents.partition { content ->
-                exactKeywords.none { keyword ->
-                    when (keyword.getKeywordScopeEnum()) {
+                exactMatchers.none { (scope, matches) ->
+                    when (scope) {
                         KeywordScope.ALL -> listOf(content.title, content.summary, content.content)
                         KeywordScope.TITLE -> listOf(content.title)
                         KeywordScope.AUTHOR_NAME -> listOf(content.authorName)
-                    }.any { keyword.matches(it) }
+                    }.any(matches)
                 }
             }
             removed.forEach { blocked.add(it to "关键词屏蔽") }
             filteredContents = kept
         }
 
-        if (settings.enableNlpBlocking) {
+        val nlpPhrases = allKeywords
+            .filter { it.getKeywordTypeEnum() == KeywordType.NLP_SEMANTIC }
+            .map { it.keyword }
+        if (settings.enableNlpBlocking && nlpPhrases.isNotEmpty()) {
             val finalFilteredContents = mutableListOf<FilterableContent>()
             val blockedThisRound = mutableListOf<FilterableContent>()
 
@@ -166,7 +181,9 @@ class FeedContentFilterPipeline(
                             blockedKeywordService.checkNLPBlockingWithWeight(
                                 title = content.title,
                                 excerpt = content.summary,
-                                content = content.content?.let { Ksoup.parse(it).text() },
+                                // Jev 只读开头 3000 字（见 Jev.kt），只解析 HTML 开头一段，不为长回答解析整篇
+                                content = content.content?.let { Ksoup.parse(it.take(NLP_HTML_PREFIX_CHARS)).text() },
+                                phrases = nlpPhrases,
                                 threshold = settings.nlpSimilarityThreshold,
                             )
                         }
@@ -202,12 +219,17 @@ class FeedContentFilterPipeline(
         }
 
         if (settings.enableTopicBlocking) {
+            // 整批内容的话题一次查库，不逐条查
+            val topicIdsByContent = filteredContents.associateWith { extractTopicIds(it.raw).orEmpty() }
+            val allBlockedTopicIds = topicIdsByContent.values
+                .flatten()
+                .distinct()
+                .takeIf { it.isNotEmpty() }
+                ?.let { blockedTopicDao.getBlockedTopicIds(it) }
+                .orEmpty()
+                .toSet()
             filteredContents = filteredContents.filter { content ->
-                val topicIds = extractTopicIds(content.raw)
-                val blockedTopicIds = topicIds
-                    ?.takeIf { it.isNotEmpty() }
-                    ?.let { blockedTopicDao.getBlockedTopicIds(it) }
-                    .orEmpty()
+                val blockedTopicIds = topicIdsByContent.getValue(content).filter { it in allBlockedTopicIds }
                 val kept = blockedTopicIds.size < settings.topicBlockingThreshold
                 if (!kept) {
                     val topicName = blockedTopicIds
@@ -223,23 +245,23 @@ class FeedContentFilterPipeline(
     }
 }
 
-private fun BlockedKeyword.matches(text: String?): Boolean {
-    if (text.isNullOrBlank()) return false
+private const val NLP_HTML_PREFIX_CHARS = 8000
 
-    return runCatching {
-        when {
-            isRegex -> {
-                val pattern = if (caseSensitive) {
-                    Regex(keyword)
-                } else {
-                    Regex(keyword, RegexOption.IGNORE_CASE)
-                }
-                pattern.containsMatchIn(text)
+private fun BlockedKeyword.matcher(): (String?) -> Boolean {
+    val pattern = if (isRegex) {
+        // 无效正则永远不匹配
+        runCatching { if (caseSensitive) Regex(keyword) else Regex(keyword, RegexOption.IGNORE_CASE) }.getOrNull()
+            ?: return { false }
+    } else {
+        null
+    }
+    return { text ->
+        !text.isNullOrBlank() &&
+            when {
+                pattern != null -> pattern.containsMatchIn(text)
+                else -> text.contains(keyword, ignoreCase = !caseSensitive)
             }
-            caseSensitive -> text.contains(keyword)
-            else -> text.contains(keyword, ignoreCase = true)
-        }
-    }.getOrDefault(false)
+    }
 }
 
 fun interface ContentDetailProvider {
@@ -311,7 +333,12 @@ class FeedDisplayFilterPipeline(
             val contentId = item.resolveContentIdentity().id
             if (contentId in filteredContentIds) {
                 val (_, raw) = itemToRawMap[contentId] ?: (null to null)
-                item.copy(raw = raw)
+                item.copy(
+                    raw = raw,
+                    wordCount = (raw as? DataHolder.Answer)?.let { answer ->
+                        Ksoup.parse(answer.content).text().count { !it.isWhitespace() }
+                    },
+                )
             } else {
                 null
             }
@@ -346,8 +373,8 @@ suspend fun saveBlockedFeedRecords(
     dao: BlockedFeedRecordDao,
     blocked: List<Pair<FilterableContent, String>>,
 ) {
-    blocked.forEach { (content, reason) ->
-        dao.insert(
+    dao.insertAll(
+        blocked.map { (content, reason) ->
             BlockedFeedRecord(
                 title = content.title,
                 questionId = content.questionId,
@@ -358,9 +385,9 @@ suspend fun saveBlockedFeedRecords(
                 blockedReason = reason,
                 navDestinationJson = content.navDestinationJson,
                 feedJson = content.feedJson,
-            ),
-        )
-    }
+            )
+        },
+    )
     dao.maintainLimit()
 }
 

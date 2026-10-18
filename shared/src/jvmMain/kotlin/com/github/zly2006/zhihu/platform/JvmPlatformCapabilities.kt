@@ -40,6 +40,9 @@ actual fun Modifier.exportTestTagsForUiAutomation(): Modifier = this
 @Composable
 actual fun rememberAppPrivateDirectory(): Path = remember { Path(desktopZhihuDataDir().absolutePath) }
 
+@Composable
+actual fun rememberUserFileDirectory(): Path = rememberAppPrivateDirectory()
+
 fun desktopSettingsStore(): SettingsStore {
     val propertiesFile = DesktopPropertiesFile("settings.properties", "Zhihu++ desktop settings")
     val properties = propertiesFile.properties

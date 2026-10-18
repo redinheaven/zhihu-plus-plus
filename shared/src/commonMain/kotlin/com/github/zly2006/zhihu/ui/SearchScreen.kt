@@ -97,7 +97,6 @@ import com.github.zly2006.zhihu.platform.SettingsStore
 import com.github.zly2006.zhihu.platform.UserMessageDuration
 import com.github.zly2006.zhihu.platform.rememberSettingsStore
 import com.github.zly2006.zhihu.platform.rememberUserMessageSink
-import com.github.zly2006.zhihu.reading.RegisterReadingQueueSource
 import com.github.zly2006.zhihu.ui.components.AuthorBadge
 import com.github.zly2006.zhihu.ui.components.DraggableRefreshButton
 import com.github.zly2006.zhihu.ui.components.FeedAuthorBlockConfirmDialog
@@ -171,24 +170,6 @@ fun SearchScreen(
     val userMessages = rememberUserMessageSink()
     val settings = rememberSettingsStore()
     val viewModel = viewModel { SearchViewModel(search.query, search.restrictedMemberHashId) }
-    val readingQueueSourceId = buildString {
-        append("search:")
-        append(search.restrictedMemberHashId)
-        append(':')
-        append(viewModel.filters.sort.name)
-        append(':')
-        append(viewModel.filters.contentType.name)
-        append(':')
-        append(viewModel.searchTab.name)
-        append(':')
-        append(viewModel.filters.timeRange.name)
-        append(':')
-        append(search.query)
-    }
-    RegisterReadingQueueSource(
-        sourceId = readingQueueSourceId,
-        items = viewModel.displayItems,
-    )
     val paginationEnvironment = rememberPaginationEnvironment(allowGuestAccess = false)
     val focusManager = LocalFocusManager.current
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -794,7 +775,6 @@ fun SearchScreen(
                             is SearchEntity.Content -> FeedCard(
                                 item = result.item,
                                 modifier = Modifier.testTag("search_general_content_${result.id}"),
-                                readingQueueSourceId = readingQueueSourceId,
                                 menuItems = { dismissMenu ->
                                     DropdownMenuItem(
                                         text = { Text("屏蔽用户") },

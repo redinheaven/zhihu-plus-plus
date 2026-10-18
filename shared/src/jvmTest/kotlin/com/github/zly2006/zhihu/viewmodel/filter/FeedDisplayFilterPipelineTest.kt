@@ -197,7 +197,6 @@ class FeedDisplayFilterPipelineTest {
             phrases.filter { text.contains("semantic body") }.map { it to 0.95 }
         }
         val keywordService = BlockedKeywordService(
-            keywordDao = fixture.database.blockedKeywordDao(),
             recordDao = fixture.database.blockedContentRecordDao(),
             semanticMatcher = semanticMatcher,
         )
@@ -434,7 +433,6 @@ class FeedDisplayFilterPipelineTest {
                 blockedQuestionDao = database.blockedQuestionDao(),
                 blockedTopicDao = database.blockedTopicDao(),
                 blockedKeywordService = BlockedKeywordService(
-                    keywordDao = database.blockedKeywordDao(),
                     recordDao = database.blockedContentRecordDao(),
                     semanticMatcher = KeywordSemanticMatcher { _, _, _ -> emptyList() },
                 ),

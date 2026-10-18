@@ -34,6 +34,8 @@ data class FeedDisplayItem(
     val isQualityFiltered: Boolean = false,
     val content: String? = null,
     var raw: DataHolder.Content? = null,
+    /** 本 fork：后台过滤抓到回答全文时统计的字数（不含空白），显示在卡片作者名右侧 */
+    val wordCount: Int? = null,
 ) {
     val stableKey: String
         get() = navDestinationJson

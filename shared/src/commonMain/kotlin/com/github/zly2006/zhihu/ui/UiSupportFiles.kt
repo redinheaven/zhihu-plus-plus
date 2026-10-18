@@ -33,7 +33,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.fleeksoft.ksoup.Ksoup
 import com.github.zly2006.zhihu.account.rememberZhihuAccountStore
 import com.github.zly2006.zhihu.data.DataHolder
 import com.github.zly2006.zhihu.markdown.RenderMarkdown
@@ -206,16 +205,6 @@ expect fun QuestionDetailWebViewContent(
     html: String,
 )
 
-@Composable
-expect fun rememberArticleTtsState(): TtsState
-
-interface ArticleSpeechToggler {
-    operator fun invoke(title: String, content: String)
-}
-
-@Composable
-expect fun rememberArticleSpeechToggler(): ArticleSpeechToggler
-
 interface ArticleBrowserOpener {
     operator fun invoke(article: Article)
 }
@@ -244,25 +233,6 @@ fun articleWebUrl(article: Article): String =
         ArticleType.Article -> "https://zhuanlan.zhihu.com/p/${article.id}"
     }
 
-fun articleSpeechText(
-    title: String,
-    content: String,
-    maxContentLength: Int = 50_000,
-): String =
-    buildString {
-        append(title)
-        append("。")
-        if (content.isNotEmpty()) {
-            val contentToProcess =
-                if (content.length > maxContentLength) {
-                    content.substring(0, maxContentLength) + "..."
-                } else {
-                    content
-                }
-            append(Ksoup.parse(contentToProcess).text())
-        }
-    }
-
 /**
  * 同一问题下不同回答之间导航时使用的共享状态。
  *
@@ -289,19 +259,6 @@ enum class ArticleAnswerTransitionDirection {
     VERTICAL_PREVIOUS,
     HORIZONTAL_NEXT,
     HORIZONTAL_PREVIOUS,
-}
-
-enum class TtsState(
-    val isSpeaking: Boolean = false,
-) {
-    Uninitialized,
-    Initializing,
-    Ready,
-    Error,
-    LoadingText,
-    Speaking(true),
-    Paused,
-    SwitchingChunk(true),
 }
 
 /**

@@ -300,16 +300,20 @@ open class SharedAndroidPaginationEnvironment(
         recordContentOpenEvent(destination, questionId)
     }
 
-    override suspend fun applyForegroundHomeFeedFilter(items: List<FeedDisplayItem>): List<FeedDisplayItem> {
-        val filterSettings = context.contentFilterSettings()
+    private suspend fun foregroundReadFilterPipeline(): ForegroundReadFilterPipeline {
         val filterDatabase = getContentFilterDatabase(context)
         return ForegroundReadFilterPipeline(
-            settings = filterSettings,
+            settings = context.contentFilterSettings(),
             contentFilterManager = ContentFilterManager(filterDatabase.contentFilterDao()),
             contentOpenEventDao = filterDatabase.contentOpenEventDao(),
             blockedFeedRecordDao = filterDatabase.blockedFeedRecordDao(),
-        ).filter(items)
+        )
     }
+
+    override suspend fun applyForegroundHomeFeedFilter(items: List<FeedDisplayItem>): List<FeedDisplayItem> =
+        foregroundReadFilterPipeline().filter(items)
+
+    override suspend fun recordHomeFeedViews(items: List<FeedDisplayItem>) = foregroundReadFilterPipeline().recordViews(items)
 
     override suspend fun applyBackgroundHomeFeedFilter(items: List<FeedDisplayItem>): List<FeedDisplayItem> {
         val filterSettings = context.contentFilterSettings()
@@ -325,7 +329,6 @@ open class SharedAndroidPaginationEnvironment(
                 blockedQuestionDao = filterDatabase.blockedQuestionDao(),
                 blockedTopicDao = filterDatabase.blockedTopicDao(),
                 blockedKeywordService = BlockedKeywordService(
-                    keywordDao = filterDatabase.blockedKeywordDao(),
                     recordDao = filterDatabase.blockedContentRecordDao(),
                     semanticMatcher = androidKeywordSemanticMatcher,
                 ),

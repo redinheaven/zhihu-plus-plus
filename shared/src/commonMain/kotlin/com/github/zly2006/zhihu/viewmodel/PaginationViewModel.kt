@@ -64,9 +64,11 @@ import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.DelicateCoroutinesApi
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
@@ -78,6 +80,9 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import kotlinx.serialization.serializer
 import kotlin.reflect.KType
+
+/** [PaginationViewModel.debugData] 最多保留的原始条目数（约 10 页） */
+internal const val DEBUG_DATA_MAX = 100
 
 abstract class PaginationViewModel<T : Any>(
     val dataType: KType,
@@ -147,6 +152,8 @@ abstract class PaginationViewModel<T : Any>(
 
     protected open fun processResponse(environment: PaginationEnvironment, data: List<T>, rawData: JsonArray) {
         debugData.addAll(rawData) // 保存原始JSON
+        // 只留最近几页供调试导出，长时间往下刷时不让原始 JSON 一直占内存
+        if (debugData.size > DEBUG_DATA_MAX) debugData.subList(0, debugData.size - DEBUG_DATA_MAX).clear()
         allData.addAll(data) // 保存未flatten的数据
     }
 
@@ -178,13 +185,17 @@ abstract class PaginationViewModel<T : Any>(
         try {
             val url = resolvePageUrl()
 
-            @Suppress("HttpUrlsUsage")
-            val json = environment.fetchJson(url.replace("http://", "https://"), include)
-                ?: throw RuntimeException("您可能已被风控，请重新登录。", Exception("cause: not json object."))
+            // 签名、JSON 解析和逐条解码放到后台线程，避免加载下一页时卡住正在滚动的列表
+            val (json, jsonArray, page) = withContext(Dispatchers.Default) {
+                @Suppress("HttpUrlsUsage")
+                val json = environment.fetchJson(url.replace("http://", "https://"), include)
+                    ?: throw RuntimeException("您可能已被风控，请重新登录。", Exception("cause: not json object."))
 
-            val jsonArray = json["data"] as? JsonArray
-                ?: throw RuntimeException("您可能已被风控，请重新登录。", Exception("cause: no $.data"))
-            processResponse(environment, decodePage(environment, jsonArray), jsonArray)
+                val jsonArray = json["data"] as? JsonArray
+                    ?: throw RuntimeException("您可能已被风控，请重新登录。", Exception("cause: no $.data"))
+                Triple(json, jsonArray, decodePage(environment, jsonArray))
+            }
+            processResponse(environment, page, jsonArray)
             if ("paging" in json) {
                 lastPaging = decodeJson(json["paging"]!!)
             }
@@ -367,7 +378,7 @@ interface ZhihuApiEnvironment {
 
 suspend fun ZhihuApiEnvironment.fetchContentDetail(destination: NavDestination): DataHolder.Content? =
     runCatching {
-        fetchZhihuContentDetail(destination) { url, include ->
+        fetchZhihuContentDetail(destination, prefetchImages = true) { url, include ->
             fetchJson(url, include)
         }
     }.getOrElse { error ->
@@ -459,7 +470,11 @@ interface MobileHomeFeedEnvironment : ZhihuApiEnvironment {
 interface FeedDisplayEnvironment {
     fun feedDisplaySettings(): FeedDisplaySettings = FeedDisplaySettings()
 
+    /** 去掉已展示过、打开过的卡片；只过滤不记录，记录见 [recordHomeFeedViews] */
     suspend fun applyForegroundHomeFeedFilter(items: List<FeedDisplayItem>): List<FeedDisplayItem> = items
+
+    /** 首页卡片真正滚进屏幕时调用，记为已展示 */
+    suspend fun recordHomeFeedViews(items: List<FeedDisplayItem>) {}
 
     suspend fun applyBackgroundHomeFeedFilter(items: List<FeedDisplayItem>): List<FeedDisplayItem> = items
 }

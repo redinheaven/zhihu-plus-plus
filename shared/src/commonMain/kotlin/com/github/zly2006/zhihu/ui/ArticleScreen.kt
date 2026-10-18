@@ -25,6 +25,8 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -55,7 +57,6 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Comment
-import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.MoreVert
@@ -74,7 +75,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -94,6 +94,7 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -145,7 +146,6 @@ import com.github.zly2006.zhihu.ui.components.DEFAULT_ANSWER_SWITCH_SENSITIVITY
 import com.github.zly2006.zhihu.ui.components.DraggableRefreshButton
 import com.github.zly2006.zhihu.ui.components.ExportDialogComponent
 import com.github.zly2006.zhihu.ui.components.MyModalBottomSheet
-import com.github.zly2006.zhihu.ui.components.VerticalReadingProgressBar
 import com.github.zly2006.zhihu.ui.components.VotersSheet
 import com.github.zly2006.zhihu.ui.components.ZhihuTwoRowsTopAppBar
 import com.github.zly2006.zhihu.ui.components.normalizedAnswerSwitchSensitivity
@@ -170,6 +170,7 @@ import org.jetbrains.compose.resources.painterResource
 import zhihu.shared.generated.resources.Res
 import zhihu.shared.generated.resources.ic_vote_down_24dp
 import zhihu.shared.generated.resources.ic_vote_up_24dp
+import kotlin.math.abs
 import kotlin.math.roundToInt
 
 private const val SCROLL_THRESHOLD = 10 // 滑动阈值，单位为dp
@@ -178,7 +179,7 @@ private val ScrollThresholdDp = SCROLL_THRESHOLD.dp
 /**
  * 文章/回答详情页。
  *
- * 页面负责加载知乎回答或专栏文章，展示标题、作者、正文、附件视频、评论入口、分享/复制/朗读/浏览器打开等底部操作，
+ * 页面负责加载知乎回答或专栏文章，展示标题、作者、正文、附件视频、评论入口、分享/复制/浏览器打开等底部操作，
  * 正文主路径使用 Compose Markdown 渲染。回答页还承载同题回答切换手势和对应转场状态，因此改动时要同时关注
  * `answerSwitchMode`、`buttonSkipAnswer`、`autoHideArticleBottomBar`、`titleAutoHide`、`answerDoubleTapAction` 和
  * `ARTICLE_USE_WEBVIEW_PREFERENCE_KEY`。
@@ -195,8 +196,6 @@ fun ArticleScreen(
     viewModel: ArticleViewModel,
 ) {
     val navigator = LocalNavigator.current
-    val readingPlayerOverlayPadding = LocalReadingPlayerOverlayPadding.current
-    val readingPlayerOverlayOffsetState = LocalReadingPlayerOverlayOffsetState.current
     val environment = rememberPaginationEnvironment(allowGuestAccess = false)
     val articleNavController = LocalArticleNavController.current
     val backStackEntry by articleNavController?.currentBackStackEntryAsState()
@@ -244,16 +243,7 @@ fun ArticleScreen(
     }
     val userMessages = rememberUserMessageSink()
     val density = LocalDensity.current
-    val readingPlayerOverlayPaddingPx = with(density) { readingPlayerOverlayPadding.roundToPx() }
-    val effectiveScrollMaxValue by remember(readingPlayerOverlayPaddingPx) {
-        derivedStateOf {
-            if (scrollState.maxValue == Int.MAX_VALUE) {
-                Int.MAX_VALUE
-            } else {
-                (scrollState.maxValue - readingPlayerOverlayPaddingPx).coerceAtLeast(0)
-            }
-        }
-    }
+    val effectiveScrollMaxValue by remember { derivedStateOf { scrollState.maxValue } }
     val latestEffectiveScrollMaxValue by rememberUpdatedState(effectiveScrollMaxValue)
     var showComments by rememberSaveable(article.type, article.id) { mutableStateOf(false) }
     var showCollectionDialog by remember { mutableStateOf(false) }
@@ -289,7 +279,6 @@ fun ArticleScreen(
         navigator = navigator,
         navController = articleNavController,
         answerSwitchMode = answerSwitchMode,
-        readingQueueSourceId = article.readingQueueSourceId,
     )
     val usesVerticalAnswerSwitch = article.type == ArticleType.Answer && answerSwitchMode == "vertical"
     val pageTurnActive = !(useWebView && isLegacyWebViewSupported) &&
@@ -310,25 +299,6 @@ fun ArticleScreen(
             .takeIf { article.type == ArticleType.Answer && pageTurnSwitchAnswer },
     )
     val hapticFeedback = LocalHapticFeedback.current
-    val readingPlayerOverlayRouteId = articleNavController?.currentBackStackEntry?.id
-        ?: article.readingQueueSourceId
-        ?: "${article.type}:${article.id}"
-    DisposableEffect(readingPlayerOverlayOffsetState, readingPlayerOverlayRouteId, usesVerticalAnswerSwitch) {
-        if (usesVerticalAnswerSwitch) {
-            readingPlayerOverlayOffsetState?.beginRoute(readingPlayerOverlayRouteId)
-        }
-        onDispose {
-            if (usesVerticalAnswerSwitch) {
-                readingPlayerOverlayOffsetState?.endRoute(readingPlayerOverlayRouteId)
-            }
-        }
-    }
-    val updateReadingPlayerOverlayOffset = remember(readingPlayerOverlayOffsetState, readingPlayerOverlayRouteId) {
-        { offsetPx: Float ->
-            readingPlayerOverlayOffsetState?.update(readingPlayerOverlayRouteId, offsetPx)
-            Unit
-        }
-    }
 
     LaunchedEffect(sharedData, isImmersiveMode) {
         if (sharedData != null) sharedData.isImmersiveMode = isImmersiveMode
@@ -394,12 +364,51 @@ fun ArticleScreen(
     }
 
     val articleBringIntoViewSpec = rememberBottomBarAvoidingBringIntoViewSpec(
-        bottomBarState.obscuredHeightPx + readingPlayerOverlayPaddingPx,
+        bottomBarState.obscuredHeightPx,
     )
     LaunchedEffect(article.id) {
         answerNavigationState.prepareArticle()
         viewModel.loadArticle(environment)
         viewModel.loadCollections(environment)
+    }
+
+    // 本 fork：手指从左往右划一段返回上一页（同返回键）。左右切换回答模式下右划是上一个回答，不启用。
+    // 正文用 Main 阶段：能横向滚动的代码块、表格先消费拖动，在它们上面划不触发；顶栏的标题、作者行可点，
+    // 在那里划完松手会被当成点击打开问题或作者页，所以顶栏用 Initial 阶段抢先识别，划动时把事件消费掉
+    val swipeBackEnabled = !(article.type == ArticleType.Answer && answerSwitchMode == "horizontal")
+
+    fun Modifier.swipeBack(pass: PointerEventPass): Modifier = if (!swipeBackEnabled) {
+        this
+    } else {
+        pointerInput(navigator, pass) {
+            val threshold = 96.dp.toPx()
+            awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false, pass = pass)
+                var dragging = false
+                while (true) {
+                    val change = awaitPointerEvent(pass).changes.firstOrNull { it.id == down.id } ?: break
+                    val dx = change.position.x - down.position.x
+                    if (!change.pressed) {
+                        if (dragging) {
+                            change.consume()
+                            if (dx > threshold) navigator.onNavigateBack()
+                        }
+                        break
+                    }
+                    if (!dragging) {
+                        // 子元素（竖向滚动、横向滚动的代码块）已经接手
+                        if (change.isConsumed) break
+                        val dy = change.position.y - down.position.y
+                        if (abs(dx) > viewConfiguration.touchSlop && abs(dx) > abs(dy)) {
+                            dragging = true
+                        } else if (abs(dy) > viewConfiguration.touchSlop) {
+                            break
+                        }
+                    }
+                    if (dragging) change.consume()
+                }
+            }
+        }
     }
 
     @OptIn(ExperimentalMaterial3Api::class)
@@ -416,6 +425,7 @@ fun ArticleScreen(
                 {
                     Box(
                         modifier = Modifier
+                            .swipeBack(PointerEventPass.Initial)
                             .onSizeChanged {
                                 topBarState.heightPx = it.height.toFloat()
                             }.graphicsLayer {
@@ -796,24 +806,6 @@ fun ArticleScreen(
                                         )
                                     }
 
-                                    val ttsState = rememberArticleTtsState()
-                                    val toggleArticleSpeech = rememberArticleSpeechToggler()
-                                    AnimatedVisibility(visible = ttsState.isSpeaking) {
-                                        IconButton(
-                                            onClick = {
-                                                toggleArticleSpeech("", "")
-                                                userMessages.showMessage("已停止朗读")
-                                            },
-                                            enabled = ttsState !in listOf(TtsState.Error, TtsState.Uninitialized, TtsState.Initializing),
-                                            colors = IconButtonDefaults.iconButtonColors(
-                                                containerColor = Color(0xFF4CAF50).harmonize(MaterialTheme.colorScheme.primary),
-                                                contentColor = Color.White,
-                                            ),
-                                        ) {
-                                            Icon(Icons.AutoMirrored.Filled.VolumeOff, contentDescription = "停止朗读")
-                                        }
-                                    }
-
                                     Button(
                                         onClick = { showComments = true },
                                         contentPadding = PaddingValues(start = 8.dp, end = 12.dp),
@@ -851,7 +843,6 @@ fun ArticleScreen(
                                 ActionBarContent()
                             }
                         }
-                        Spacer(modifier = Modifier.height(readingPlayerOverlayPadding))
                     }
                 }
             },
@@ -1074,14 +1065,13 @@ fun ArticleScreen(
         settings.putBoolean("answerSwitchHintShown", true)
         userMessages.showMessage("到底后继续上拉，可切换到下一个回答", UserMessageDuration.Long)
     }
-    val progressBarTopPadding = WindowInsets.statusBars.asPaddingValues().calculateTopPadding() + 64.dp
-    val progressBarBottomPadding = WindowInsets.systemBars.asPaddingValues().calculateBottomPadding() + 96.dp
 
     Box(
         modifier = Modifier
             .fillMaxSize()
             .testTag("article_screen_root")
-            .then(answerDoubleTapModifier),
+            .then(answerDoubleTapModifier)
+            .swipeBack(PointerEventPass.Main),
     ) {
         // 根据模式渲染
         if (article.type == ArticleType.Answer && answerSwitchMode == "vertical") {
@@ -1094,7 +1084,6 @@ fun ArticleScreen(
                 isAtBottom = { scrollState.value >= effectiveScrollMaxValue },
                 scrollState = scrollState,
                 answerSwitchSensitivity = answerSwitchSensitivity,
-                onOverscrollOffsetChange = updateReadingPlayerOverlayOffset,
             ) {
                 MainContent()
             }
@@ -1118,16 +1107,7 @@ fun ArticleScreen(
             MainContent()
         }
 
-        VerticalReadingProgressBar(
-            scrollState = scrollState,
-            modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .padding(
-                    top = progressBarTopPadding,
-                    bottom = progressBarBottomPadding,
-                    end = 2.dp,
-                ),
-        )
+        // 本 fork：正文滑动时不显示右侧的进度条（上游 VerticalReadingProgressBar 保留未调用）
 
         // 跳转按钮需要压在问题区和回答区之上。
         if (article.type == ArticleType.Answer && buttonSkipAnswer && !isImmersiveMode) {
@@ -1172,9 +1152,6 @@ fun ArticleScreen(
     ArticleActionsMenu(
         article = article,
         viewModel = viewModel,
-        answerQueueFallbackProvider = sharedData?.navigator?.let { answerNavigator ->
-            { limit -> answerNavigator.remainingAnswersSnapshot(article.id, limit) }
-        },
         showMenu = showActionsMenu,
         onDismissRequest = { showActionsMenu = false },
         onSummaryRequest = {
@@ -1231,6 +1208,7 @@ fun ArticleScreen(
         showComments = showComments,
         onDismiss = { showComments = false },
         content = article,
+        contentTitle = viewModel.title,
         isZhPlusAuthorContent = article.type == ArticleType.Answer &&
             viewModel.authorId == DataHolder.ZH_PLUS_AUTHOR_USER_ID,
     )

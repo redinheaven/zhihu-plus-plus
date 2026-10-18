@@ -108,7 +108,6 @@ import com.github.zly2006.zhihu.navigation.WriteAnswer
 import com.github.zly2006.zhihu.platform.rememberSettingsStore
 import com.github.zly2006.zhihu.platform.rememberUserMessageSink
 import com.github.zly2006.zhihu.platform.rememberZhihuWebUrlOpener
-import com.github.zly2006.zhihu.reading.RegisterReadingQueueSource
 import com.github.zly2006.zhihu.ui.components.CommentScreenComponent
 import com.github.zly2006.zhihu.ui.components.FeedCard
 import com.github.zly2006.zhihu.ui.components.FeedPullToRefresh
@@ -173,7 +172,6 @@ private suspend fun loadQuestion(
 fun QuestionScreen(
     question: Question,
 ) {
-    val readingPlayerOverlayPadding = LocalReadingPlayerOverlayPadding.current
     val settings = rememberSettingsStore()
     val executeShareAction = rememberShareActionExecutor()
     val openZhihuWebUrl = rememberZhihuWebUrlOpener()
@@ -181,11 +179,6 @@ fun QuestionScreen(
     val viewModel: QuestionFeedViewModel = viewModel(key = "question_${question.questionId}") {
         QuestionFeedViewModel(question.questionId)
     }
-    val answerReadingQueueSourceId = "question:${question.questionId}:answers:${viewModel.sortOrder}"
-    RegisterReadingQueueSource(
-        sourceId = answerReadingQueueSourceId,
-        items = viewModel.displayItems,
-    )
     val paginationEnvironment = rememberPaginationEnvironment(allowGuestAccess = false)
     val answerSwitchState = sharedArticleAnswerSwitchState
     val listState = rememberLazyListState()
@@ -279,7 +272,6 @@ fun QuestionScreen(
                     .padding(innerPadding)
                     .pageTurnViewportWithGuide(pageTurnTarget)
                     .testTag(QUESTION_SCREEN_LIST_TAG),
-                contentPadding = PaddingValues(bottom = readingPlayerOverlayPadding),
                 footer = ProgressIndicatorFooter,
                 topContent = {
                     item {
@@ -336,7 +328,6 @@ fun QuestionScreen(
             ) { item ->
                 FeedCard(
                     item = item,
-                    readingQueueSourceId = answerReadingQueueSourceId,
                     modifier = Modifier.testTag("question_feed_item_${item.stableKey}"),
                 ) { _, destination ->
                     answerSwitchState.pendingNavigator = viewModel.createAnswerNavigatorFor(item, paginationEnvironment)
@@ -349,6 +340,7 @@ fun QuestionScreen(
         showComments = showComments,
         onDismiss = { showComments = false },
         content = question,
+        contentTitle = title,
     )
 
     // 分享对话框

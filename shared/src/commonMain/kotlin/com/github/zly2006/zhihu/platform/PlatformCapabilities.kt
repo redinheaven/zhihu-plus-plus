@@ -143,6 +143,10 @@ expect fun Modifier.exportTestTagsForUiAutomation(): Modifier
 @Composable
 expect fun rememberAppPrivateDirectory(): Path
 
+/** 用户能拿到的应用文件目录：Android 是外部文件目录（Android/data/<包名>/files，连电脑可见），桌面端就是数据目录 */
+@Composable
+expect fun rememberUserFileDirectory(): Path
+
 @Composable
 expect fun rememberExternalUrlOpener(): ExternalUrlOpener
 

@@ -30,6 +30,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.layout.Arrangement
@@ -60,7 +61,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.appendInlineContent
-import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.automirrored.outlined.Comment
@@ -108,6 +108,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalDensity
@@ -149,11 +150,10 @@ import com.github.zly2006.zhihu.platform.rememberExternalUrlOpener
 import com.github.zly2006.zhihu.platform.rememberImagePreviewOpener
 import com.github.zly2006.zhihu.platform.rememberImageSaver
 import com.github.zly2006.zhihu.platform.rememberImageSharer
+import com.github.zly2006.zhihu.platform.rememberPlainTextClipboard
 import com.github.zly2006.zhihu.platform.rememberSettingsStore
+import com.github.zly2006.zhihu.platform.rememberUserFileDirectory
 import com.github.zly2006.zhihu.platform.rememberUserMessageSink
-import com.github.zly2006.zhihu.reading.ReadingCommentOrder
-import com.github.zly2006.zhihu.reading.loadReadingPreferences
-import com.github.zly2006.zhihu.reading.saveReadingPreferences
 import com.github.zly2006.zhihu.ui.components.PageTurnFab
 import com.github.zly2006.zhihu.ui.components.pageTurnContentEndMarker
 import com.github.zly2006.zhihu.ui.components.pageTurnViewportWithGuide
@@ -170,11 +170,22 @@ import com.github.zly2006.zhihu.viewmodel.comment.RootCommentViewModel
 import com.github.zly2006.zhihu.viewmodel.filter.BlockedUser
 import com.github.zly2006.zhihu.viewmodel.filter.getContentFilterDatabase
 import com.github.zly2006.zhihu.viewmodel.rememberPaginationEnvironment
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.datetime.LocalDateTime
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.number
 import kotlinx.datetime.toLocalDateTime
+import kotlinx.io.buffered
+import kotlinx.io.files.Path
+import kotlinx.io.files.SystemFileSystem
+import kotlinx.io.readString
+import kotlinx.io.writeString
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import kotlin.math.abs
@@ -452,12 +463,10 @@ fun CommentScreen(
     onInitialChildCommentResolved: (CommentModel, DataHolder.Comment) -> Unit = { _, _ -> },
     pageTurnEnabled: Boolean = false,
     showPageTurnFab: Boolean = false,
+    contentTitle: String = "",
 ) {
     val paginationEnvironment = rememberPaginationEnvironment(allowGuestAccess = false)
-    val readingSettings = rememberSettingsStore()
-    val initialReadingCommentOrder = remember(readingSettings) {
-        loadReadingPreferences(readingSettings).commentOrder
-    }
+    val settings = rememberSettingsStore()
     val resolvedContent = content()
     var isSending by remember { mutableStateOf(false) }
     var replyToComment by remember { mutableStateOf<CommentModel?>(null) }
@@ -516,10 +525,8 @@ fun CommentScreen(
 
         else -> viewModel(key = viewModelKey) {
             RootCommentViewModel(resolvedContent, initialCommentId).apply {
-                sortOrder = when (initialReadingCommentOrder) {
-                    ReadingCommentOrder.Score -> CommentSortOrder.SCORE
-                    ReadingCommentOrder.Time -> CommentSortOrder.TIME
-                }
+                sortOrder = CommentSortOrder.entries.find { it.name == settings.getStringOrNull(COMMENT_SORT_ORDER_KEY) }
+                    ?: CommentSortOrder.SCORE
             }
         }
     }
@@ -764,6 +771,7 @@ fun CommentScreen(
                                 Column(modifier = modifier) {
                                     CommentItem(
                                         comment = commentItem,
+                                        contentTitle = contentTitle,
                                         isLiked = isLiked,
                                         likeCount = likeCount,
                                         isLikeLoading = isLikeLoading,
@@ -807,6 +815,7 @@ fun CommentScreen(
                                                     )
                                                     CommentItem(
                                                         comment = childCommentItem,
+                                                        contentTitle = contentTitle,
                                                         modifier = Modifier.testTag("comment_row_${childComment.id}"),
                                                         isLiked = liked,
                                                         likeCount = likeCount,
@@ -936,12 +945,7 @@ fun CommentScreen(
                                                 },
                                                 onClick = {
                                                     viewModel.changeSortOrder(CommentSortOrder.SCORE, paginationEnvironment)
-                                                    saveReadingPreferences(
-                                                        readingSettings,
-                                                        loadReadingPreferences(readingSettings).copy(
-                                                            commentOrder = ReadingCommentOrder.Score,
-                                                        ),
-                                                    )
+                                                    settings.putString(COMMENT_SORT_ORDER_KEY, CommentSortOrder.SCORE.name)
                                                 },
                                             )
                                             Spacer(Modifier.width(12.dp))
@@ -964,12 +968,7 @@ fun CommentScreen(
                                                 },
                                                 onClick = {
                                                     viewModel.changeSortOrder(CommentSortOrder.TIME, paginationEnvironment)
-                                                    saveReadingPreferences(
-                                                        readingSettings,
-                                                        loadReadingPreferences(readingSettings).copy(
-                                                            commentOrder = ReadingCommentOrder.Time,
-                                                        ),
-                                                    )
+                                                    settings.putString(COMMENT_SORT_ORDER_KEY, CommentSortOrder.TIME.name)
                                                 },
                                             )
                                         }
@@ -1271,10 +1270,40 @@ internal fun NavDestination.commentThreadKey(): String = when (this) {
 }
 
 @OptIn(ExperimentalFoundationApi::class)
+/** 评论区上次选的排序（热门 / 最新） */
+private const val COMMENT_SORT_ORDER_KEY = "commentSortOrder"
+
+private const val SAVED_COMMENTS_FILE_NAME = "saved_comments.json"
+
+/** 双击收藏的评论：评论文字和所在问题（文章、想法）的标题 */
+@Serializable
+private data class SavedComment(
+    val text: String,
+    val title: String,
+)
+
+private val savedCommentsJson = Json { prettyPrint = true }
+private val savedCommentsLock = Mutex()
+
+/** 追加到 [file] 里的 JSON 数组；同一条已收藏过返回 false。文件读不出来时报错，不覆盖用户已有的收藏 */
+private suspend fun saveComment(file: Path, comment: SavedComment): Boolean = withContext(Dispatchers.Default) {
+    savedCommentsLock.withLock {
+        val saved = if (SystemFileSystem.exists(file)) {
+            savedCommentsJson.decodeFromString<List<SavedComment>>(SystemFileSystem.source(file).buffered().use { it.readString() })
+        } else {
+            emptyList()
+        }
+        if (comment in saved) return@withLock false
+        SystemFileSystem.sink(file).buffered().use { it.writeString(savedCommentsJson.encodeToString(saved + comment)) }
+        true
+    }
+}
+
 @Composable
 private fun CommentItem(
     comment: CommentModel,
     modifier: Modifier = Modifier,
+    contentTitle: String = "",
     isLiked: Boolean = false,
     likeCount: Int = 0,
     isLikeLoading: Boolean = false,
@@ -1292,8 +1321,36 @@ private fun CommentItem(
             urlToken = commentData.author.urlToken,
         )
     var showMoreMenu by remember(commentData.id) { mutableStateOf(false) }
+    val copyPlainText = rememberPlainTextClipboard()
+    val userMessages = rememberUserMessageSink()
+    val haptic = LocalHapticFeedback.current
+    val scope = rememberCoroutineScope()
+    val savedCommentsFile = Path(rememberUserFileDirectory(), SAVED_COMMENTS_FILE_NAME)
 
-    Column(modifier = modifier.fillMaxWidth()) {
+    // 本 fork：长按复制整条评论文字；双击把评论文字和所在问题的标题收藏到 saved_comments.json。
+    // 头像、作者名、点赞等可点的地方自己处理点击，不会触发这两个动作
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .pointerInput(commentData.id, contentTitle) {
+                detectTapGestures(
+                    onLongPress = {
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        copyPlainText("comment", Ksoup.parseBodyFragment(commentData.content).text())
+                        userMessages.showShortMessage("已复制评论")
+                    },
+                    onDoubleTap = {
+                        val saved = SavedComment(Ksoup.parseBodyFragment(commentData.content).text(), contentTitle)
+                        scope.launch {
+                            val message = runCatching {
+                                if (saveComment(savedCommentsFile, saved)) "已收藏评论" else "这条评论已收藏过"
+                            }.getOrElse { "收藏失败：${it.message}" }
+                            userMessages.showShortMessage(message)
+                        }
+                    },
+                )
+            },
+    ) {
         // 作者信息
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -1399,17 +1456,14 @@ private fun CommentItem(
                     // 本 fork：超过 500 字的评论先折叠，点「展开全文」再显示全部
                     var expanded by remember(commentData.id) { mutableStateOf(false) }
                     val collapsible = string.length > 500
-                    SelectionContainer(
-                        modifier = Modifier.commentSelectionWorkaround(),
-                    ) {
-                        Text(
-                            text = if (collapsible && !expanded) string.subSequence(0, 500) + AnnotatedString("…") else string,
-                            // 与首页卡片摘要同为 14sp（同样跟随阅读字号设置）
-                            fontSize = 14.sp * fontSizePercent / 100,
-                            lineHeight = 14.sp * fontSizePercent / 100 * lineHeightPercent / 100,
-                            inlineContent = inlineContent,
-                        )
-                    }
+                    // 本 fork：不再支持选择部分文字，长按改为复制整条
+                    Text(
+                        text = if (collapsible && !expanded) string.subSequence(0, 500) + AnnotatedString("…") else string,
+                        // 与首页卡片摘要同为 14sp（同样跟随阅读字号设置）
+                        fontSize = 14.sp * fontSizePercent / 100,
+                        lineHeight = 14.sp * fontSizePercent / 100 * lineHeightPercent / 100,
+                        inlineContent = inlineContent,
+                    )
                     if (collapsible) {
                         Text(
                             text = if (expanded) "收起" else "展开全文",

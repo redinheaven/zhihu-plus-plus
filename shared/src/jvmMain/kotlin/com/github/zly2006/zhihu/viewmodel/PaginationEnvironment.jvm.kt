@@ -239,15 +239,17 @@ class DesktopPaginationEnvironment(
         recordContentOpenEvent(destination, questionId)
     }
 
-    override suspend fun applyForegroundHomeFeedFilter(items: List<FeedDisplayItem>): List<FeedDisplayItem> {
-        val settings = settingsStore.toFeedFilterSettings()
-        return ForegroundReadFilterPipeline(
-            settings = settings,
-            contentFilterManager = ContentFilterManager(contentFilterDb.contentFilterDao()),
-            contentOpenEventDao = contentFilterDb.contentOpenEventDao(),
-            blockedFeedRecordDao = contentFilterDb.blockedFeedRecordDao(),
-        ).filter(items)
-    }
+    private fun foregroundReadFilterPipeline() = ForegroundReadFilterPipeline(
+        settings = settingsStore.toFeedFilterSettings(),
+        contentFilterManager = ContentFilterManager(contentFilterDb.contentFilterDao()),
+        contentOpenEventDao = contentFilterDb.contentOpenEventDao(),
+        blockedFeedRecordDao = contentFilterDb.blockedFeedRecordDao(),
+    )
+
+    override suspend fun applyForegroundHomeFeedFilter(items: List<FeedDisplayItem>): List<FeedDisplayItem> =
+        foregroundReadFilterPipeline().filter(items)
+
+    override suspend fun recordHomeFeedViews(items: List<FeedDisplayItem>) = foregroundReadFilterPipeline().recordViews(items)
 
     override suspend fun applyBackgroundHomeFeedFilter(items: List<FeedDisplayItem>): List<FeedDisplayItem> {
         val settings = settingsStore.toFeedFilterSettings()
@@ -262,7 +264,6 @@ class DesktopPaginationEnvironment(
                 blockedQuestionDao = contentFilterDb.blockedQuestionDao(),
                 blockedTopicDao = contentFilterDb.blockedTopicDao(),
                 blockedKeywordService = BlockedKeywordService(
-                    keywordDao = contentFilterDb.blockedKeywordDao(),
                     recordDao = contentFilterDb.blockedContentRecordDao(),
                     semanticMatcher = null,
                 ),

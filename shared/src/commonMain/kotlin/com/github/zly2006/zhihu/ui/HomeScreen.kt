@@ -73,12 +73,17 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -91,6 +96,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
@@ -99,9 +105,11 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
 import com.github.zly2006.zhihu.data.DataHolder
 import com.github.zly2006.zhihu.data.Feed
+import com.github.zly2006.zhihu.data.FeedDisplayItem
 import com.github.zly2006.zhihu.data.MOBILE_NOTIFICATION_MESSAGE_URL
 import com.github.zly2006.zhihu.data.MobileNotificationMessageOverview
 import com.github.zly2006.zhihu.data.RecommendationMode
+import com.github.zly2006.zhihu.data.ZhihuJson
 import com.github.zly2006.zhihu.data.networkReconnected
 import com.github.zly2006.zhihu.data.target
 import com.github.zly2006.zhihu.filter.RemoteHistorySync
@@ -117,7 +125,6 @@ import com.github.zly2006.zhihu.platform.UserMessageDuration
 import com.github.zly2006.zhihu.platform.rememberAppPrivateDirectory
 import com.github.zly2006.zhihu.platform.rememberSettingsStore
 import com.github.zly2006.zhihu.platform.rememberUserMessageSink
-import com.github.zly2006.zhihu.reading.RegisterReadingQueueSource
 import com.github.zly2006.zhihu.ui.components.BlockByKeywordsDialog
 import com.github.zly2006.zhihu.ui.components.BlockTopicMenuItems
 import com.github.zly2006.zhihu.ui.components.DraggableRefreshButton
@@ -134,27 +141,43 @@ import com.github.zly2006.zhihu.ui.components.pageTurnViewportWithGuide
 import com.github.zly2006.zhihu.ui.components.rememberPageTurnTarget
 import com.github.zly2006.zhihu.ui.subscreens.DEFAULT_FAB_OPACITY
 import com.github.zly2006.zhihu.ui.subscreens.PREF_FAB_OPACITY
+import com.github.zly2006.zhihu.util.Log
 import com.github.zly2006.zhihu.util.json
+import com.github.zly2006.zhihu.viewmodel.HomeFeedFilterResult
+import com.github.zly2006.zhihu.viewmodel.PaginationEnvironment
 import com.github.zly2006.zhihu.viewmodel.QUALITY_FILTER_MODE_PREFERENCE_KEY
 import com.github.zly2006.zhihu.viewmodel.QualityFilterMode
 import com.github.zly2006.zhihu.viewmodel.feed.BaseFeedViewModel
 import com.github.zly2006.zhihu.viewmodel.feed.HomeFeedInteractionViewModel
 import com.github.zly2006.zhihu.viewmodel.feed.HomeFeedViewModel
 import com.github.zly2006.zhihu.viewmodel.feed.blockableQuestion
+import com.github.zly2006.zhihu.viewmodel.feed.replaceHomeFeedItemsWithFilteredResult
 import com.github.zly2006.zhihu.viewmodel.local.LocalHomeFeedViewModel
+import com.github.zly2006.zhihu.viewmodel.postSigned
 import com.github.zly2006.zhihu.viewmodel.rememberPaginationEnvironment
 import com.github.zly2006.zhihu.viewmodel.za.AndroidHomeFeedViewModel
 import com.github.zly2006.zhihu.viewmodel.za.MixedHomeFeedViewModel
+import io.ktor.client.request.forms.MultiPartFormDataContent
+import io.ktor.client.request.forms.formData
 import io.ktor.client.request.get
+import io.ktor.client.request.header
+import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.isSuccess
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.io.buffered
 import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
 import kotlinx.io.readString
 import kotlinx.io.writeString
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
 const val PREFERENCE_NAME = "com.github.zly2006.zhihu_preferences"
@@ -180,6 +203,128 @@ private class HomeScreenState(
     settings: SettingsStore,
 ) : ViewModel() {
     val remoteHistory = RemoteHistorySync(settings)
+
+    /** 本次运行里已做过初次加载的推荐模式：之后列表即使空了也不自动刷新，只等用户手动刷新 */
+    val initialLoadedModes = mutableSetOf<RecommendationMode>()
+
+    /** 刷新时换上的预取实例及其推荐模式；为空或模式不符时用 viewModel() 创建的初始实例 */
+    var swappedFeed by mutableStateOf<Pair<RecommendationMode, BaseFeedViewModel>?>(null)
+        private set
+
+    /**
+     * 阅读期间预取的下一轮刷新。用户的节奏是「刷新—阅读—刷新」，阅读时网络空闲：回到列表时新建一个同类
+     * ViewModel 在后台照常加载、过滤（含详情和 Jev），刷新时直接换上，免去等网络和过滤。
+     * 只留一份，不设有效期（用户不在乎实时性）；已展示只在卡片滚进屏幕时记（见 [markSeen]），预取的不会被当成看过。
+     */
+    var prefetchedFeed by mutableStateOf<Pair<RecommendationMode, BaseFeedViewModel>?>(null)
+        private set
+
+    private fun newDeferredFeed(mode: RecommendationMode): BaseFeedViewModel? = when (mode) {
+        RecommendationMode.WEB -> HomeFeedViewModel()
+        RecommendationMode.ANDROID -> AndroidHomeFeedViewModel()
+        RecommendationMode.MIXED -> MixedHomeFeedViewModel()
+        RecommendationMode.LOCAL -> null
+    }
+
+    fun prefetch(mode: RecommendationMode, environment: PaginationEnvironment) {
+        val pending = prefetchedFeed?.takeIf { it.first == mode }?.second
+        // 已在加载或已加载好就不重复预取；报错或加载完却是空的才重来
+        if (pending != null && pending.errorMessage == null && (pending.isLoading || pending.displayItems.isNotEmpty())) return
+        if (environment.feedDisplaySettings().reverseBlock) return
+        val feed = newDeferredFeed(mode) ?: return
+        prefetchedFeed = mode to feed
+        feed.refresh(environment)
+    }
+
+    /** 进程被杀后切回时，把存在文件里的预取批次放回内存，留给下次手动刷新 */
+    fun adoptPrefetched(mode: RecommendationMode, items: List<FeedDisplayItem>) {
+        val feed = newDeferredFeed(mode) ?: return
+        feed.addDisplayItems(items)
+        prefetchedFeed = mode to feed
+    }
+
+    /** 有预取好的下一轮就换上并返回 true；没有或还没加载出内容时返回 false，由调用方正常刷新。 */
+    suspend fun swapInPrefetched(mode: RecommendationMode, environment: PaginationEnvironment): Boolean {
+        val feed = prefetchedFeed?.takeIf { it.first == mode }?.second?.takeIf { it.displayItems.isNotEmpty() } ?: return false
+        prefetchedFeed = null
+        // 再跑一遍前台已读过滤：去掉预取之后在旧列表里划到过、打开过的
+        val unread = remoteHistory.filterRemoteReads(environment.applyForegroundHomeFeedFilter(feed.displayItems.toList()))
+        if (unread.isEmpty()) return false
+        val unreadKeys = unread.mapTo(hashSetOf()) { it.stableKey }
+        feed.displayItems.removeAll { it.stableKey !in unreadKeys }
+        swappedFeed = mode to feed
+        // 预取之后可能新加了屏蔽规则，换上后在后台再过一遍；可见卡片照常延后移除
+        refilter(feed, environment, protectVisible = true)
+        return true
+    }
+
+    /** 本次运行滚进过屏幕的卡片 */
+    private val seenKeys = hashSetOf<String>()
+    private val pendingTouch = linkedSetOf<Pair<String, String>>()
+    private var touchJob: Job? = null
+
+    /**
+     * 卡片真正滚进屏幕才算看过：本地记为已展示（以后不再推），网页 / 混合推荐还向知乎上报 touch（攒 3 秒一起报）。
+     * 加载了但没划到就被刷新掉的卡片什么都不记，以后还能被推回来。
+     */
+    fun markSeen(items: List<FeedDisplayItem>, mode: RecommendationMode, environment: PaginationEnvironment) {
+        if (mode == RecommendationMode.LOCAL) return
+        val newItems = items.filter { seenKeys.add(it.stableKey) }
+        if (newItems.isEmpty()) return
+        viewModelScope.launch(Dispatchers.Default) { runCatching { environment.recordHomeFeedViews(newItems) } }
+        if (mode == RecommendationMode.ANDROID) return
+        newItems.filterNot { it.isFiltered }.mapNotNullTo(pendingTouch) { item ->
+            when (val target = item.feed?.target) {
+                is Feed.AnswerTarget -> "answer" to target.id.toString()
+                is Feed.ArticleTarget -> "article" to target.id.toString()
+                is Feed.PinTarget -> "pin" to target.id.toString()
+                else -> null
+            }
+        }
+        touchJob?.cancel()
+        touchJob = viewModelScope.launch {
+            delay(3000)
+            if (pendingTouch.isEmpty() || environment.authenticatedCookies()["d_c0"] == null) return@launch
+            val batch = pendingTouch.toList()
+            try {
+                val response = environment.postSigned("https://www.zhihu.com/lastread/touch") {
+                    header("x-requested-with", "fetch")
+                    setBody(
+                        MultiPartFormDataContent(
+                            formData {
+                                append("items", ZhihuJson.json.encodeToString(batch.map { (type, id) -> listOf(type, id, "touch") }))
+                            },
+                        ),
+                    )
+                }
+                if (response.status.isSuccess()) {
+                    pendingTouch.removeAll(batch.toSet())
+                } else {
+                    Log.e("Browse-Touch", response.bodyAsText())
+                }
+            } catch (e: Exception) {
+                if (e is CancellationException) throw e
+                environment.handleFetchFailure("HomeScreen", e)
+            }
+        }
+    }
+
+    /**
+     * 按当前屏蔽规则在后台重新过滤 [feed] 的列表（详情和 Jev 结果大多命中缓存），不刷新。
+     * [protectVisible] 为 false 时命中的可见卡片也立刻移除（用户刚加了屏蔽规则，期待马上生效）。
+     */
+    fun refilter(feed: BaseFeedViewModel, environment: PaginationEnvironment, protectVisible: Boolean) {
+        val items = feed.displayItems.toList()
+        viewModelScope.launch(Dispatchers.Default) {
+            val filtered = runCatching { environment.applyBackgroundHomeFeedFilter(items) }.getOrElse { return@launch }
+            withContext(Dispatchers.Main) {
+                feed.listSync.pendingRemovalKeys += feed.displayItems.replaceHomeFeedItemsWithFilteredResult(
+                    HomeFeedFilterResult(foregroundItems = items, filteredItems = filtered, reverseBlock = false),
+                    if (protectVisible) feed.listSync.visibleItemKeys else emptySet(),
+                )
+            }
+        }
+    }
 }
 
 /**
@@ -197,7 +342,6 @@ fun HomeScreen(
     showTopActions: Boolean = true,
     isActive: Boolean = true,
 ) {
-    val readingPlayerOverlayPadding = LocalReadingPlayerOverlayPadding.current
     val navigator = LocalNavigator.current
     val baseEnvironment = rememberPaginationEnvironment(allowGuestAccess = true)
     val settings = rememberSettingsStore()
@@ -244,20 +388,49 @@ fun HomeScreen(
         )
     }
     val isDebuggable = rememberHomeIsDebuggable()
-    val viewModel: BaseFeedViewModel = when (currentRecommendationMode) {
+    val initialViewModel: BaseFeedViewModel = when (currentRecommendationMode) {
         RecommendationMode.WEB -> viewModel { HomeFeedViewModel() }
         RecommendationMode.ANDROID -> viewModel { AndroidHomeFeedViewModel() }
         RecommendationMode.LOCAL -> viewModel { LocalHomeFeedViewModel() }
         RecommendationMode.MIXED -> viewModel { MixedHomeFeedViewModel() }
     }
+    val viewModel = homeState.swappedFeed?.takeIf { it.first == currentRecommendationMode }?.second ?: initialViewModel
+    val latestViewModel by rememberUpdatedState(viewModel)
+    val prefetchCacheFile = remember(appPrivateDirectory, currentRecommendationMode) {
+        Path(appPrivateDirectory, homeFeedPrefetchCacheFileName(currentRecommendationMode))
+    }
+    val currentListCacheFile = remember(appPrivateDirectory, currentRecommendationMode) {
+        Path(appPrivateDirectory, homeFeedCurrentListCacheFileName(currentRecommendationMode))
+    }
+
+    // 进程在后台被系统杀掉、切回时由系统恢复的为 true（保存状态带回来的），全新启动为 false
+    var homeShownBefore by rememberSaveable { mutableStateOf(false) }
+    val restoredAfterProcessDeath = remember { homeShownBefore }
+    SideEffect { homeShownBefore = true }
+
+    // 写在 homeState 的协程里：切到回答页时首页会离开组合，不能被一起取消
+    fun writeFile(file: Path, serialized: String) {
+        homeState.viewModelScope.launch(Dispatchers.Default) {
+            runCatching { SystemFileSystem.sink(file).buffered().use { it.writeString(serialized) } }
+        }
+    }
     val localHomeViewModel = viewModel as? LocalHomeFeedViewModel
-    val readingQueueSourceId = "home:${currentRecommendationMode.name}"
-    RegisterReadingQueueSource(
-        sourceId = readingQueueSourceId,
-        items = viewModel.displayItems,
-    )
 
     val listState = rememberLazyListState()
+    val refreshScope = rememberCoroutineScope()
+
+    // 刷新：有阅读期间预取好的下一轮就直接换上并回到顶部，否则正常刷新
+    suspend fun refreshFeed(pull: Boolean) {
+        if (homeState.swapInPrefetched(currentRecommendationMode, paginationEnvironment)) {
+            listState.scrollToItem(0)
+            withContext(Dispatchers.Default) { runCatching { SystemFileSystem.delete(prefetchCacheFile, mustExist = false) } }
+        } else if (pull) {
+            viewModel.pullToRefresh(paginationEnvironment)
+        } else {
+            viewModel.refresh(paginationEnvironment)
+        }
+    }
+
     var cachedScrollToTopTrigger by remember { mutableIntStateOf(scrollToTopTrigger) }
     LaunchedEffect(scrollToTopTrigger) {
         when (
@@ -266,7 +439,7 @@ fun HomeScreen(
                 isAtTop = listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0,
             )
         ) {
-            TopLevelReselectAction.Refresh -> viewModel.refresh(paginationEnvironment)
+            TopLevelReselectAction.Refresh -> refreshFeed(pull = false)
             TopLevelReselectAction.ScrollToTop -> listState.animateScrollToItem(0)
             null -> {}
         }
@@ -299,6 +472,29 @@ fun HomeScreen(
         }
     }
 
+    // 预取好的下一轮也存一份：App 被杀后冷启动直接显示这批还没看过的内容
+    val prefetchedFeed = homeState.prefetchedFeed?.takeIf { it.first == currentRecommendationMode }?.second
+    val prefetchedPage = prefetchedFeed?.latestLoadedDisplayItems?.value
+    LaunchedEffect(prefetchedPage) {
+        val items = prefetchedFeed?.displayItems?.toList() ?: return@LaunchedEffect
+        encodeHomeFeedStartupSnapshot(items, maxItems = Int.MAX_VALUE)?.let { writeFile(prefetchCacheFile, it) }
+    }
+
+    // 切出时存一份整批的当前列表：进程在后台被系统杀掉后切回能原样恢复，不用刷新。
+    // 打开回答时首页先离开组合、收不到 ON_STOP，所以离开组合时也存
+    DisposableEffect(lifecycleOwner, currentListCacheFile) {
+        fun save() {
+            encodeHomeFeedStartupSnapshot(latestViewModel.displayItems.toList(), maxItems = Int.MAX_VALUE)
+                ?.let { writeFile(currentListCacheFile, it) }
+        }
+        val observer = LifecycleEventObserver { _, event -> if (event == Lifecycle.Event.ON_STOP) save() }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            save()
+        }
+    }
+
     val completedPageCount = viewModel.completedPageCount
     LaunchedEffect(completedPageCount) {
         if (completedPageCount > 0 &&
@@ -321,35 +517,55 @@ fun HomeScreen(
             ) {
                 remoteHistory.start(homeState.viewModelScope, baseEnvironment)
             }
+            // 换上预取实例后本 effect 不重启，用 latestViewModel 拿当前实例
+            val feed = latestViewModel
             if (!account.login && settings.getBoolean("loginForRecommendation", true)) {
                 requestLoginNavigation()
-            } else if (viewModel.displayItems.isEmpty()) {
-                val cachedItems = if (autoRefreshOnStartup) {
+            } else if (feed.displayItems.isEmpty() && currentRecommendationMode !in homeState.initialLoadedModes) {
+                // 每种推荐模式本次运行只自动加载这一次；之后列表即使空了（如全被屏蔽）也只等用户手动刷新。
+                // 加载完才记：切回时首页先恢复、回答页随即盖上来会取消这里，返回首页时要重来
+                fun readSnapshot(file: Path) = runCatching {
+                    if (SystemFileSystem.exists(file)) {
+                        SystemFileSystem.source(file).buffered().use { source -> decodeHomeFeedStartupSnapshot(source.readString()) }
+                    } else {
+                        emptyList()
+                    }
+                }.getOrDefault(emptyList())
+                val prefetchedItems = withContext(Dispatchers.Default) { readSnapshot(prefetchCacheFile) }
+                if (restoredAfterProcessDeath) {
+                    // 切出后进程被系统杀掉再切回：原样恢复切出时的列表，不刷新；预取的那批放回内存留给下次手动刷新
+                    if (prefetchedItems.isNotEmpty()) homeState.adoptPrefetched(currentRecommendationMode, prefetchedItems)
+                    val currentItems = withContext(Dispatchers.Default) { readSnapshot(currentListCacheFile) }
+                    if (currentItems.isNotEmpty()) {
+                        feed.addDisplayItems(currentItems)
+                        homeState.initialLoadedModes += currentRecommendationMode
+                        return@repeatOnLifecycle
+                    }
+                }
+                val cachedItems = if (prefetchedItems.isNotEmpty()) {
+                    // 全新启动：上次阅读时预取好、还没看过的一批就是这次的刷新，用后删除；它预取时没记录已展示，这里才记
+                    withContext(Dispatchers.Default) { runCatching { SystemFileSystem.delete(prefetchCacheFile, mustExist = false) } }
+                    paginationEnvironment.applyForegroundHomeFeedFilter(prefetchedItems)
+                } else if (autoRefreshOnStartup) {
                     emptyList()
                 } else {
-                    withContext(Dispatchers.Default) {
-                        runCatching {
-                            if (SystemFileSystem.exists(startupCacheFile)) {
-                                SystemFileSystem.source(startupCacheFile).buffered().use { source ->
-                                    decodeHomeFeedStartupSnapshot(source.readString())
-                                }
-                            } else {
-                                emptyList()
-                            }
-                        }.getOrDefault(emptyList())
-                    }
+                    withContext(Dispatchers.Default) { readSnapshot(startupCacheFile) }
                 }
                 if (cachedItems.isNotEmpty()) {
                     remoteHistory.awaitRecentPage()
                     val unreadCachedItems = remoteHistory.filterRemoteReads(cachedItems)
                     if (unreadCachedItems.isEmpty()) {
-                        viewModel.refresh(paginationEnvironment)
+                        feed.refresh(paginationEnvironment)
                     } else {
-                        viewModel.addDisplayItems(unreadCachedItems)
+                        feed.addDisplayItems(unreadCachedItems)
                     }
                 } else {
-                    viewModel.refresh(paginationEnvironment)
+                    feed.refresh(paginationEnvironment)
                 }
+                homeState.initialLoadedModes += currentRecommendationMode
+            } else if (!feed.isLoading) {
+                // 回到列表（读完一篇返回、从后台切回）时预取下一轮刷新
+                homeState.prefetch(currentRecommendationMode, paginationEnvironment)
             }
         }
     }
@@ -376,6 +592,20 @@ fun HomeScreen(
                 if (viewModel.displayItems[index].stableKey in removedKeys) viewModel.displayItems.removeAt(index)
             }
             viewModel.latestLoadedDisplayItems.value = remoteHistory.filterRemoteReads(viewModel.latestLoadedDisplayItems.value)
+        }
+    }
+
+    // 记录可见卡片，滚进屏幕的记为看过；后台过滤命中时还在屏幕上的卡片，等滑出屏幕再移除
+    LaunchedEffect(viewModel, currentRecommendationMode) {
+        snapshotFlow { listState.layoutInfo.visibleItemsInfo.mapTo(hashSetOf()) { it.key } }.collect { keys ->
+            val sync = viewModel.listSync
+            sync.visibleItemKeys = keys
+            homeState.markSeen(viewModel.displayItems.filter { it.stableKey in keys }, currentRecommendationMode, paginationEnvironment)
+            val leaving = sync.pendingRemovalKeys.filterTo(hashSetOf()) { it !in keys }
+            if (leaving.isNotEmpty()) {
+                viewModel.displayItems.removeAll { it.stableKey in leaving }
+                sync.pendingRemovalKeys -= leaving
+            }
         }
     }
 
@@ -610,7 +840,12 @@ fun HomeScreen(
                 }
             }
 
-            FeedPullToRefresh(viewModel, PaddingValues(top = scaffoldPadding.calculateTopPadding())) {
+            FeedPullToRefresh(
+                viewModel,
+                paginationEnvironment,
+                PaddingValues(top = scaffoldPadding.calculateTopPadding()),
+                onRefresh = { refreshFeed(pull = true) },
+            ) {
                 PaginatedList(
                     items = viewModel.displayItems,
                     listState = listState,
@@ -619,7 +854,7 @@ fun HomeScreen(
                         .testTag(HOME_FEED_LIST_TAG),
                     contentPadding = PaddingValues(
                         top = scaffoldPadding.calculateTopPadding() + 8.dp,
-                        bottom = innerPadding.calculateBottomPadding() + readingPlayerOverlayPadding,
+                        bottom = innerPadding.calculateBottomPadding(),
                     ),
                     onLoadMore = { viewModel.loadMore(paginationEnvironment) },
                     footer = ProgressIndicatorFooter,
@@ -627,7 +862,6 @@ fun HomeScreen(
                 ) { item ->
                     FeedCard(
                         item,
-                        readingQueueSourceId = readingQueueSourceId,
                         thumbnailUrl = when (val target = item.feed?.target) {
                             is Feed.AnswerTarget -> target.thumbnail
                             else -> null
@@ -703,15 +937,13 @@ fun HomeScreen(
                                 userMessages.showShortMessage("已复制调试数据")
                             },
                             preferenceName = "copyAll",
-                            bottomAvoidance = readingPlayerOverlayPadding,
                         ) {
                             Icon(Icons.Default.CopyAll, contentDescription = "复制")
                         }
                     }
                     DraggableRefreshButton(
                         modifier = Modifier.testTag(HOME_REFRESH_BUTTON_TAG),
-                        bottomAvoidance = readingPlayerOverlayPadding,
-                        onClick = { viewModel.refresh(paginationEnvironment) },
+                        onClick = { refreshScope.launch { refreshFeed(pull = false) } },
                     ) {
                         if (viewModel.isLoading) {
                             CircularProgressIndicator(modifier = Modifier.size(30.dp))
@@ -748,7 +980,7 @@ fun HomeScreen(
                     .align(Alignment.BottomEnd)
                     .padding(
                         end = 16.dp,
-                        bottom = innerPadding.calculateBottomPadding() + readingPlayerOverlayPadding + 16.dp,
+                        bottom = innerPadding.calculateBottomPadding() + 16.dp,
                     ),
                 horizontalAlignment = Alignment.End,
             ) {
@@ -860,7 +1092,8 @@ fun HomeScreen(
                 feedToBlockByKeywords = null
             },
             onConfirm = {
-                viewModel.refresh(paginationEnvironment)
+                // 只按新规则重新过滤当前列表、马上移除命中的卡片，不刷新；预取的下一批换上时也会再过滤
+                homeState.refilter(viewModel, paginationEnvironment, protectVisible = false)
                 showBlockByKeywordsDialog = false
                 feedToBlockByKeywords = null
             },

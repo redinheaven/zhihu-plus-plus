@@ -142,7 +142,8 @@ fun <T> PaginatedList(
                 false
             } else {
                 val lastVisibleItem = visibleItemsInfo.last()
-                lastVisibleItem.index >= layoutInfo.totalItemsCount - 3
+                // 提前几张卡片开始加载下一页，正常速度往下刷时不会先看到底部的加载圈
+                lastVisibleItem.index >= layoutInfo.totalItemsCount - 8
             }
         }
     }

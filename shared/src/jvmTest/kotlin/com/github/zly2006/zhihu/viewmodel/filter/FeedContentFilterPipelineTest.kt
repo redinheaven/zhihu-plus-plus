@@ -37,7 +37,6 @@ class FeedContentFilterPipelineTest {
         database.blockedTopicDao().insertTopic(BlockedTopic(topicId = "blocked-topic", topicName = "Blocked Topic"))
 
         val keywordService = BlockedKeywordService(
-            keywordDao = database.blockedKeywordDao(),
             recordDao = database.blockedContentRecordDao(),
             semanticMatcher = KeywordSemanticMatcher { text, phrases, _ ->
                 phrases.filter { text.contains("nlp hit") }.map { it to 0.95 }
@@ -89,7 +88,6 @@ class FeedContentFilterPipelineTest {
             createTempDirectory("feed-content-filter-html").resolve("content-filter.db").toFile(),
         )
         val keywordService = BlockedKeywordService(
-            keywordDao = database.blockedKeywordDao(),
             recordDao = database.blockedContentRecordDao(),
             semanticMatcher = KeywordSemanticMatcher { text, phrases, _ ->
                 phrases
@@ -144,7 +142,7 @@ class FeedContentFilterPipelineTest {
             blockedQuestionAuthorDao = database.blockedQuestionAuthorDao(),
             blockedQuestionDao = database.blockedQuestionDao(),
             blockedTopicDao = database.blockedTopicDao(),
-            blockedKeywordService = BlockedKeywordService(keywordDao, database.blockedContentRecordDao(), null),
+            blockedKeywordService = BlockedKeywordService(database.blockedContentRecordDao(), null),
         ).filter(
             listOf(
                 filterable("含标题词的标题", content = "正文", authorId = "a"),

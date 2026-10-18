@@ -46,17 +46,7 @@ import com.github.zly2006.zhihu.navigation.CommentHolder
 import com.github.zly2006.zhihu.navigation.NavDestination
 import com.github.zly2006.zhihu.notification.NotificationSettingsStore
 import com.github.zly2006.zhihu.platform.UserMessageSink
-import com.github.zly2006.zhihu.platform.androidSettingsStore
 import com.github.zly2006.zhihu.platform.rememberUserMessageSink
-import com.github.zly2006.zhihu.reading.AndroidReadingPlayerBridge
-import com.github.zly2006.zhihu.reading.ContentReadingService
-import com.github.zly2006.zhihu.reading.ReadingContentType
-import com.github.zly2006.zhihu.reading.ReadingPlaybackStatus
-import com.github.zly2006.zhihu.reading.ReadingPreferences
-import com.github.zly2006.zhihu.reading.ReadingQueueItem
-import com.github.zly2006.zhihu.reading.ReadingStartRequest
-import com.github.zly2006.zhihu.reading.ReadingTemplateField
-import com.github.zly2006.zhihu.reading.loadReadingPlaybackSpeed
 import com.github.zly2006.zhihu.ui.article.prepareContentDocument
 import com.github.zly2006.zhihu.ui.components.WebviewComp
 import com.github.zly2006.zhihu.ui.components.setupUpWebviewClient
@@ -93,70 +83,6 @@ private fun Context.zhihuVersionInfo(): String {
         ?: if ((applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0) "debug" else "release"
     val gitHash = metaData?.getString("com.github.zly2006.zhihu.GIT_HASH") ?: "unknown"
     return "$versionName $buildType, $gitHash"
-}
-
-@Composable
-actual fun rememberArticleTtsState(): TtsState {
-    val state by AndroidReadingPlayerBridge.state.collectAsState()
-    return when (state.status) {
-        ReadingPlaybackStatus.Idle -> TtsState.Ready
-        ReadingPlaybackStatus.Initializing -> TtsState.Initializing
-        ReadingPlaybackStatus.Loading -> TtsState.LoadingText
-        ReadingPlaybackStatus.Playing -> TtsState.Speaking
-        ReadingPlaybackStatus.Paused -> TtsState.Paused
-        ReadingPlaybackStatus.Error -> TtsState.Error
-    }
-}
-
-@Composable
-actual fun rememberArticleSpeechToggler(): ArticleSpeechToggler {
-    val context = LocalContext.current
-    val coroutineScope = rememberCoroutineScope()
-    val userMessages = rememberUserMessageSink()
-    val ttsState = rememberArticleTtsState()
-    return remember(context, coroutineScope, userMessages, ttsState) {
-        object : ArticleSpeechToggler {
-            override fun invoke(title: String, content: String) {
-                if (ttsState.isSpeaking) {
-                    context.startService(ContentReadingService.commandIntent(context, ContentReadingService.ACTION_STOP))
-                } else if (ttsState !in listOf(TtsState.Error, TtsState.Uninitialized, TtsState.Initializing)) {
-                    coroutineScope.launch {
-                        try {
-                            withContext(Dispatchers.IO) {
-                                val textToRead = articleSpeechText(title, content)
-                                withContext(Dispatchers.Main) {
-                                    if (textToRead.isNotBlank()) {
-                                        AndroidReadingPlayerBridge.start(
-                                            context,
-                                            ReadingStartRequest(
-                                                queue = listOf(
-                                                    ReadingQueueItem(
-                                                        contentType = ReadingContentType.Article,
-                                                        id = title.hashCode().toLong() and 0xffffffffL,
-                                                        title = title,
-                                                        bodyHtml = textToRead,
-                                                    ),
-                                                ),
-                                                preferences = ReadingPreferences(
-                                                    fieldOrder = listOf(ReadingTemplateField.Body),
-                                                    enabledFields = setOf(ReadingTemplateField.Body),
-                                                    queueLimit = 1,
-                                                    transitionText = "",
-                                                ),
-                                                playbackSpeed = loadReadingPlaybackSpeed(androidSettingsStore(context)),
-                                            ),
-                                        )
-                                    }
-                                }
-                            }
-                        } catch (e: Exception) {
-                            userMessages.showMessage("朗读失败：${e.message}")
-                        }
-                    }
-                }
-            }
-        }
-    }
 }
 
 @Composable

@@ -34,12 +34,21 @@ private const val HOME_FEED_STARTUP_SNAPSHOT_MAX_ITEMS = 10
 fun homeFeedStartupCacheFileName(recommendationMode: RecommendationMode): String =
     HOME_FEED_STARTUP_CACHE_FILE_PREFIX + recommendationMode.key + HOME_FEED_STARTUP_CACHE_FILE_SUFFIX
 
+/** 阅读期间预取好、还没看过的下一轮刷新；冷启动时优先显示（不论是否开启启动自动刷新），用后删除 */
+fun homeFeedPrefetchCacheFileName(recommendationMode: RecommendationMode): String =
+    "home_feed_prefetch_" + recommendationMode.key + HOME_FEED_STARTUP_CACHE_FILE_SUFFIX
+
+/** 切出 App 时的当前列表；进程在后台被系统杀掉后切回时原样恢复，不刷新 */
+fun homeFeedCurrentListCacheFileName(recommendationMode: RecommendationMode): String =
+    "home_feed_current_" + recommendationMode.key + HOME_FEED_STARTUP_CACHE_FILE_SUFFIX
+
 fun homeFeedStartupCacheFileNames(): List<String> =
     listOf(LEGACY_HOME_FEED_STARTUP_CACHE_FILE_NAME) + RecommendationMode.entries.map(::homeFeedStartupCacheFileName)
 
-fun encodeHomeFeedStartupSnapshot(items: List<FeedDisplayItem>): String? {
+/** [maxItems]：启动快照只要首屏；预取的下一轮和切出时的当前列表要整批存，不能丢 */
+fun encodeHomeFeedStartupSnapshot(items: List<FeedDisplayItem>, maxItems: Int = HOME_FEED_STARTUP_SNAPSHOT_MAX_ITEMS): String? {
     // raw 的多态内容自带 type 字段，会与 kotlinx.serialization 的默认类型判别字段冲突；启动恢复也不需要这份可重新获取的详情缓存。
-    val snapshotItems = items.take(HOME_FEED_STARTUP_SNAPSHOT_MAX_ITEMS).map { it.copy(raw = null) }
+    val snapshotItems = items.take(maxItems).map { it.copy(raw = null) }
     if (snapshotItems.isEmpty()) return null
 
     return try {

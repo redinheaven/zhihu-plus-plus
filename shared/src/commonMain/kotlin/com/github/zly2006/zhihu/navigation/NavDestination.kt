@@ -127,9 +127,6 @@ data object Account : TopLevelDestination {
     ) : NavDestination
 
     @Serializable
-    data object ReadingSettings : NavDestination
-
-    @Serializable
     data class RecommendSettings(
         val setting: String = "",
     ) : NavDestination {
@@ -236,7 +233,6 @@ data class Article(
     var authorBio: String = "loading...",
     var avatarSrc: String? = null,
     var excerpt: String? = null,
-    val readingQueueSourceId: String? = null,
 ) : NavDestination {
     override fun hashCode(): Int = id.hashCode()
 
@@ -264,7 +260,6 @@ data class SegmentCommentHolder(
 data class Question(
     val questionId: Long,
     val title: String = "loading...",
-    val readingQueueSourceId: String? = null,
 ) : NavDestination {
     override fun hashCode(): Int = questionId.hashCode()
 
@@ -347,7 +342,6 @@ data class Video(
 data class Pin(
     val id: Long,
     val authorName: String = "",
-    val readingQueueSourceId: String? = null,
 ) : NavDestination {
     override fun hashCode(): Int = id.hashCode()
 
@@ -360,13 +354,6 @@ data class Topic(
     val name: String = "",
     val section: String = "",
 ) : NavDestination
-
-fun NavDestination.withReadingQueueSource(sourceId: String?): NavDestination = when (this) {
-    is Article -> copy(readingQueueSourceId = sourceId)
-    is Pin -> copy(readingQueueSourceId = sourceId)
-    is Question -> copy(readingQueueSourceId = sourceId)
-    else -> this
-}
 
 fun resolveContent(url: String): NavDestination? = runCatching { resolveContent(Url(url)) }.getOrNull()
 

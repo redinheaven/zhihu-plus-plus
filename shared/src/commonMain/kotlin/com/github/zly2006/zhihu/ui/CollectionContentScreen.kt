@@ -62,7 +62,6 @@ import com.github.zly2006.zhihu.navigation.ArticleType
 import com.github.zly2006.zhihu.navigation.CollectionAnswerNavigator
 import com.github.zly2006.zhihu.navigation.LocalNavigator
 import com.github.zly2006.zhihu.platform.PlatformBackHandler
-import com.github.zly2006.zhihu.reading.RegisterReadingQueueSource
 import com.github.zly2006.zhihu.ui.components.FeedCard
 import com.github.zly2006.zhihu.ui.components.PaginatedList
 import com.github.zly2006.zhihu.ui.components.ProgressIndicatorFooter
@@ -198,11 +197,6 @@ internal fun CollectionContentBody(
 ) {
     val navigator = LocalNavigator.current
     val sharedData = sharedArticleAnswerSwitchState
-    val readingQueueSourceId = "collection:$collectionId:contents"
-    RegisterReadingQueueSource(
-        sourceId = readingQueueSourceId,
-        items = displayItems,
-    )
 
     val visibleCollectionItems = displayItems.mapNotNull { displayItem ->
         val sourceIndex = viewModel.displayItems.indexOf(displayItem)
@@ -236,7 +230,6 @@ internal fun CollectionContentBody(
     ) { item ->
         FeedCard(
             item = item,
-            readingQueueSourceId = readingQueueSourceId,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(vertical = 8.dp)

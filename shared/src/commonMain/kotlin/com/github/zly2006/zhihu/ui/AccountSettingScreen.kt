@@ -40,11 +40,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Login
 import androidx.compose.material.icons.automirrored.filled.Logout
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
-import androidx.compose.material.icons.filled.ArrowOutward
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Bookmark
-import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Code
 import androidx.compose.material.icons.filled.FilterAlt
 import androidx.compose.material.icons.filled.Groups
@@ -52,7 +49,6 @@ import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.QrCodeScanner
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SwitchAccount
 import androidx.compose.material3.AlertDialog
@@ -64,7 +60,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -91,9 +86,7 @@ import com.github.zly2006.zhihu.navigation.requestLoginNavigation
 import com.github.zly2006.zhihu.platform.platformBottomBarItemLimit
 import com.github.zly2006.zhihu.platform.rememberPlainTextClipboard
 import com.github.zly2006.zhihu.platform.rememberSettingsStore
-import com.github.zly2006.zhihu.platform.rememberSystemUrlOpener
 import com.github.zly2006.zhihu.platform.rememberUserMessageSink
-import com.github.zly2006.zhihu.reading.isReadingPlayerSupported
 import com.github.zly2006.zhihu.ui.components.SettingItem
 import com.github.zly2006.zhihu.ui.components.SettingItemGroup
 import com.github.zly2006.zhihu.ui.components.pageTurnViewportWithGuide
@@ -107,9 +100,7 @@ import com.github.zly2006.zhihu.util.Log
 import kotlinx.coroutines.CancellationException
 import org.jetbrains.compose.resources.painterResource
 import zhihu.shared.generated.resources.Res
-import zhihu.shared.generated.resources.ic_github_24dp
 import zhihu.shared.generated.resources.ic_launcher_foreground
-import zhihu.shared.generated.resources.ic_license_24dp
 
 const val ACCOUNT_SETTINGS_SCROLL_TAG = "accountSettings.scroll"
 const val ACCOUNT_SETTINGS_LOGIN_ITEM_TAG = "accountSettings.loginItem"
@@ -121,12 +112,9 @@ const val ACCOUNT_SETTINGS_SHORTCUT_SUBSCRIPTIONS_TAG = "accountSettings.shortcu
 const val ACCOUNT_SETTINGS_SHORTCUT_NOTIFICATION_TAG = "accountSettings.shortcutNotification"
 const val ACCOUNT_SETTINGS_SHORTCUT_HISTORY_TAG = "accountSettings.shortcutHistory"
 const val ACCOUNT_SETTINGS_APPEARANCE_TAG = "accountSettings.appearance"
-const val ACCOUNT_SETTINGS_READING_TAG = "accountSettings.reading"
 const val ACCOUNT_SETTINGS_RECOMMEND_TAG = "accountSettings.recommend"
-const val ACCOUNT_SETTINGS_SEARCH_TAG = "accountSettings.search"
 const val ACCOUNT_SETTINGS_SYSTEM_TAG = "accountSettings.system"
 const val ACCOUNT_SETTINGS_DEVELOPER_TAG = "accountSettings.developer"
-const val ACCOUNT_SETTINGS_LICENSES_TAG = "accountSettings.licenses"
 const val ACCOUNT_SETTINGS_IDENTITY_MANAGEMENT_TAG = "accountSettings.identityManagement"
 
 /**
@@ -154,10 +142,8 @@ fun AccountSettingScreen(
     val requestLogin = ::requestLoginNavigation
     val settings = rememberSettingsStore()
     val copyPlainText = rememberPlainTextClipboard()
-    val openSystemUrl = rememberSystemUrlOpener()
     val userMessages = rememberUserMessageSink()
     val versionInfo = rememberAppVersionInfo()
-    val readingPlayerSupported = isReadingPlayerSupported
     val launchQrScanner = rememberAccountQrScanAction()
 
     val useDuo3HomeAccount = remember { settings.getBoolean("duo3_home_account", false) }
@@ -410,67 +396,6 @@ fun AccountSettingScreen(
                 }
             } else {
                 Spacer(Modifier.height(32.dp))
-                SettingItemGroup {
-                    if (data.login) {
-                        SettingItem(
-                            title = { Text("查看收藏夹") },
-                            icon = { Icon(Icons.Default.BookmarkBorder, null) },
-                            onClick = {
-                                data.urlToken?.let { navigator.onNavigate(Collections(it)) }
-                            },
-                        )
-                        SettingItem(
-                            title = { Text("查看关注订阅") },
-                            description = { Text("话题、问题、专栏和收藏夹") },
-                            icon = { Icon(Icons.Default.Groups, null) },
-                            modifier = Modifier.testTag(ACCOUNT_SETTINGS_SHORTCUT_SUBSCRIPTIONS_TAG),
-                            onClick = {
-                                navigator.onNavigate(
-                                    Person(
-                                        id = data.id,
-                                        urlToken = data.urlToken ?: "",
-                                        name = data.username,
-                                        jumpTo = "关注订阅",
-                                    ),
-                                )
-                            },
-                        )
-                    }
-                }
-            }
-
-            Column(Modifier.padding(horizontal = 16.dp)) {
-                Surface(
-                    modifier = Modifier
-                        .height(36.dp)
-                        .testTag(ACCOUNT_SETTINGS_SEARCH_TAG),
-                    shape = RoundedCornerShape(24.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant,
-                    onClick = {
-                        navigator.onNavigate(Account.SettingsSearch)
-                    },
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .padding(horizontal = 16.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Icon(
-                            Icons.Default.Search,
-                            contentDescription = "搜索",
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(
-                            text = "搜索设置项",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            style = MaterialTheme.typography.bodyLarge,
-                        )
-                    }
-                }
-
-                Spacer(Modifier.height(16.dp))
             }
 
             SettingItemGroup {
@@ -491,16 +416,6 @@ fun AccountSettingScreen(
                     modifier = Modifier.testTag(ACCOUNT_SETTINGS_APPEARANCE_TAG),
                     onClick = { navigator.onNavigate(Account.AppearanceSettings()) },
                 )
-
-                if (readingPlayerSupported) {
-                    SettingItem(
-                        title = { Text("朗读与播放") },
-                        description = { Text("朗读内容、播放队列与条目过渡") },
-                        icon = { Icon(Icons.AutoMirrored.Filled.VolumeUp, null) },
-                        modifier = Modifier.testTag(ACCOUNT_SETTINGS_READING_TAG),
-                        onClick = { navigator.onNavigate(Account.ReadingSettings) },
-                    )
-                }
 
                 SettingItem(
                     title = { Text("推荐系统与内容过滤") },
@@ -543,10 +458,7 @@ fun AccountSettingScreen(
                 }
             }
 
-            SettingItemGroup(
-                title = "关于",
-                footer = { Text("本软件仅供学习交流使用，应用内内容由知乎网站提供，著作权归其对应作者所有。") },
-            ) {
+            SettingItemGroup(title = "关于") {
                 SettingItem(
                     title = { Text("知乎++ Jev") },
                     description = { Text("版本号：$versionInfo") },
@@ -574,44 +486,6 @@ fun AccountSettingScreen(
                             userMessages.showShortMessage("已复制版本号")
                         },
                     ),
-                )
-                SettingItem(
-                    title = { Text("GitHub 项目地址") },
-                    description = { Text("https://github.com/redinheaven/zhihu-plus-plus\n基于 zly2006/zhihu-plus-plus 修改") },
-                    icon = { Icon(painterResource(Res.drawable.ic_github_24dp), null) },
-                    onClick = {
-                        openSystemUrl("https://github.com/redinheaven/zhihu-plus-plus")
-                    },
-                    endAction = {
-                        Icon(
-                            Icons.Default.ArrowOutward,
-                            null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    },
-                )
-
-                SettingItem(
-                    title = { Text("项目协议") },
-                    description = { Text("AGPL-3.0-only") },
-                    icon = { Icon(painterResource(Res.drawable.ic_license_24dp), null) },
-                    onClick = {
-                        openSystemUrl("https://github.com/redinheaven/zhihu-plus-plus/blob/master/LICENSE")
-                    },
-                    endAction = {
-                        Icon(
-                            Icons.Default.ArrowOutward,
-                            null,
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    },
-                )
-                SettingItem(
-                    title = { Text("开源许可") },
-                    description = { Text("查看第三方组件许可证") },
-                    icon = { Icon(painterResource(Res.drawable.ic_license_24dp), null) },
-                    modifier = Modifier.testTag(ACCOUNT_SETTINGS_LICENSES_TAG),
-                    onClick = { navigator.onNavigate(Account.OpenSourceLicenses) },
                 )
             }
         }

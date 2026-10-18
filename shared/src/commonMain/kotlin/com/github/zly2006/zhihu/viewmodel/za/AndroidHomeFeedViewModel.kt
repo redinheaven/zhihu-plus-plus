@@ -23,17 +23,20 @@ import com.github.zly2006.zhihu.data.DataHolder
 import com.github.zly2006.zhihu.data.Feed
 import com.github.zly2006.zhihu.data.FeedDisplayItem
 import com.github.zly2006.zhihu.data.Person
+import com.github.zly2006.zhihu.data.QualityFilterSettings
 import com.github.zly2006.zhihu.data.ZhihuJson
 import com.github.zly2006.zhihu.data.isHostResolutionFailure
 import com.github.zly2006.zhihu.data.target
 import com.github.zly2006.zhihu.data.toFeedDisplayItemNavDestinationJson
 import com.github.zly2006.zhihu.navigation.Article
+import com.github.zly2006.zhihu.navigation.ArticleType
 import com.github.zly2006.zhihu.navigation.Pin
 import com.github.zly2006.zhihu.navigation.resolveContent
 import com.github.zly2006.zhihu.util.jsonObject
 import com.github.zly2006.zhihu.viewmodel.ContentInteractionEnvironment
 import com.github.zly2006.zhihu.viewmodel.HomeFeedFilterResult
 import com.github.zly2006.zhihu.viewmodel.PaginationEnvironment
+import com.github.zly2006.zhihu.viewmodel.QualityFilterMode
 import com.github.zly2006.zhihu.viewmodel.feed.BaseFeedViewModel
 import com.github.zly2006.zhihu.viewmodel.feed.HomeFeedInteractionViewModel
 import com.github.zly2006.zhihu.viewmodel.feed.replaceHomeFeedItemsWithFilteredResult
@@ -52,6 +55,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.int
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -67,55 +71,70 @@ class AndroidHomeFeedViewModel :
 
     public override suspend fun fetchFeeds(environment: PaginationEnvironment) {
         try {
-            val response = environment.mobileHomeFeedHttpClient().get(lastPaging?.next ?: initialUrl)
-            if (response.status.isSuccess()) {
-                val jojo = response.jsonObject()
-                val data = jojo["data"]?.jsonArray ?: throw IllegalStateException("No data found in response")
+            // 解析、过滤（含逐条详情解码）放到后台线程，只有改列表时切回主线程
+            withContext(Dispatchers.Default) {
+                val response = environment.mobileHomeFeedHttpClient().get(lastPaging?.next ?: initialUrl)
+                if (response.status.isSuccess()) {
+                    val jojo = response.jsonObject()
+                    val data = jojo["data"]?.jsonArray ?: throw IllegalStateException("No data found in response")
 
-                // 收集所有待显示的项目
-                val itemsToDisplay = mutableListOf<FeedDisplayItem>()
+                    // 收集所有待显示的项目
+                    val itemsToDisplay = mutableListOf<FeedDisplayItem>()
+                    val displaySettings = environment.feedDisplaySettings()
+                    val qualityFilter = displaySettings.qualityFilter.takeIf {
+                        displaySettings.qualityFilterMode != QualityFilterMode.OFF && !displaySettings.reverseBlock
+                    }
 
-                data
-                    .map { it.jsonObject }
-                    .forEach { card ->
-                        try {
-                            val displayItem = parseMobileHomeFeedDisplayItem(card) ?: return@forEach
-                            itemsToDisplay.add(displayItem)
-                        } catch (e: Exception) {
-                            environment.logDecodeFailure("AndroidHomeFeedViewModel", card, e)
+                    data
+                        .map { it.jsonObject }
+                        .forEach { card ->
+                            try {
+                                val displayItem = parseMobileHomeFeedDisplayItem(card, qualityFilter) ?: return@forEach
+                                if (displayItem.isQualityFiltered && displaySettings.qualityFilterMode == QualityFilterMode.HIDE) return@forEach
+                                itemsToDisplay.add(displayItem)
+                            } catch (e: Exception) {
+                                environment.logDecodeFailure("AndroidHomeFeedViewModel", card, e)
+                            }
+                        }
+
+                    // 前台先做本地已读过滤，再立即展示
+                    val reverseBlock = environment.feedDisplaySettings().reverseBlock
+                    val foregroundItems = environment.applyForegroundHomeFeedFilter(itemsToDisplay)
+                    if (!reverseBlock) {
+                        withContext(Dispatchers.Main) {
+                            addDisplayItems(foregroundItems)
                         }
                     }
 
-                // 前台先做本地已读过滤，再立即展示
-                val reverseBlock = environment.feedDisplaySettings().reverseBlock
-                val foregroundItems = environment.applyForegroundHomeFeedFilter(itemsToDisplay)
-                if (!reverseBlock) {
-                    withContext(Dispatchers.Main) {
-                        addDisplayItems(foregroundItems)
+                    lastPaging = if ("paging" in jojo) {
+                        ZhihuJson.decodeJson(jojo["paging"]!!)
+                    } else {
+                        null
                     }
-                }
 
-                val filteredItems = environment.applyBackgroundHomeFeedFilter(foregroundItems)
-                if (reverseBlock) {
-                    addDisplayItems(filteredItems)
-                }
+                    // 后台过滤要逐条拉详情，单独跑，不让下一页、下拉刷新圈等它
+                    viewModelScope.launch(Dispatchers.Default) {
+                        try {
+                            val filteredItems = environment.applyBackgroundHomeFeedFilter(foregroundItems)
+                            if (reverseBlock) {
+                                withContext(Dispatchers.Main) { addDisplayItems(filteredItems) }
+                            }
 
-                val filterResult = HomeFeedFilterResult(
-                    foregroundItems = foregroundItems,
-                    filteredItems = filteredItems,
-                    reverseBlock = reverseBlock,
-                )
+                            val filterResult = HomeFeedFilterResult(
+                                foregroundItems = foregroundItems,
+                                filteredItems = filteredItems,
+                                reverseBlock = reverseBlock,
+                            )
 
-                // 移除被过滤的条目，并更新已保留条目的 raw 内容
-                withContext(Dispatchers.Main) {
-                    displayItems.replaceHomeFeedItemsWithFilteredResult(filterResult)
-                    latestLoadedDisplayItems.value = filterResult.filteredItems
-                }
-
-                lastPaging = if ("paging" in jojo) {
-                    ZhihuJson.decodeJson(jojo["paging"]!!)
-                } else {
-                    null
+                            // 移除被过滤的条目，并更新已保留条目的 raw 内容
+                            withContext(Dispatchers.Main) {
+                                listSync.pendingRemovalKeys += displayItems.replaceHomeFeedItemsWithFilteredResult(filterResult, listSync.visibleItemKeys)
+                                latestLoadedDisplayItems.value = filterResult.filteredItems
+                            }
+                        } catch (e: Exception) {
+                            if (e !is CancellationException) environment.handleMobileHomeFeedFailure(e)
+                        }
+                    }
                 }
             }
         } catch (e: Exception) {
@@ -160,7 +179,10 @@ class AndroidHomeFeedViewModel :
 }
 
 @OptIn(ExperimentalEncodingApi::class)
-fun parseMobileHomeFeedDisplayItem(card: JsonObject): FeedDisplayItem? {
+fun parseMobileHomeFeedDisplayItem(
+    card: JsonObject,
+    qualityFilter: QualityFilterSettings? = null,
+): FeedDisplayItem? {
     if (card["type"]?.jsonPrimitive?.content != "ComponentCard") {
         return null
     }
@@ -209,8 +231,8 @@ fun parseMobileHomeFeedDisplayItem(card: JsonObject): FeedDisplayItem? {
     val voteUp = footerLine.firstOrNull { it["reaction"]?.jsonPrimitive?.content == "Vote" }
     val comment = footerLine.firstOrNull { it["reaction"]?.jsonPrimitive?.content == "Comment" }
     val collect = footerLine.firstOrNull { it["reaction"]?.jsonPrimitive?.content == "Collect" }
-    val footerText = if (voteUp != null && comment != null && collect != null) {
-        val voteUpCount = voteUp["count"]!!.jsonPrimitive.int
+    val voteUpCount = voteUp?.get("count")?.jsonPrimitive?.intOrNull
+    val footerText = if (voteUpCount != null && comment != null && collect != null) {
         val commentCount = comment["count"]!!.jsonPrimitive.int
         val collectCount = collect["count"]!!.jsonPrimitive.int
         "$voteUpCount 赞同 · $commentCount 评论 · $collectCount 收藏"
@@ -232,6 +254,23 @@ fun parseMobileHomeFeedDisplayItem(card: JsonObject): FeedDisplayItem? {
     val authorName = lineAuthor.joStrMatch("type", "Text")["text"]!!.jsonPrimitive.content
     // 本 fork：推荐接口的广告卡长得和普通卡一样，只在作者位置写「广告 · 点击立即体验」，按这个丢掉
     if (authorName.startsWith("广告")) return null
+    // 本 fork：质量屏蔽的赞数门槛。安卓推荐卡片只带赞数，没有作者粉丝数和是否关注，所以只按赞数判断
+    val minVoteUp = when ((routeDest as? Article)?.type) {
+        ArticleType.Answer -> qualityFilter?.answerVoteupCount
+        ArticleType.Article -> qualityFilter?.articleVoteupCount
+        null -> null
+    }
+    if (minVoteUp != null && voteUpCount != null && voteUpCount < minVoteUp) {
+        return FeedDisplayItem(
+            title = "已屏蔽",
+            summary = "规则：赞数 < $minVoteUp",
+            details = footerText,
+            feed = null,
+            navDestinationJson = routeDest.toFeedDisplayItemNavDestinationJson(),
+            isFiltered = true,
+            isQualityFiltered = true,
+        )
+    }
     if (routeDest is Article) {
         routeDest.authorName = authorName
         routeDest.title = title

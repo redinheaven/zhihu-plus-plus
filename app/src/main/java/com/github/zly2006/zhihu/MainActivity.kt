@@ -76,7 +76,6 @@ import com.github.zly2006.zhihu.nlp.JevKeywordSemanticMatcher
 import com.github.zly2006.zhihu.nlp.JevKeywordWeightExtractor
 import com.github.zly2006.zhihu.platform.androidSettingsStore
 import com.github.zly2006.zhihu.platform.androidUserMessageSink
-import com.github.zly2006.zhihu.reading.ContentReadingService
 import com.github.zly2006.zhihu.theme.AndroidThemeSettings
 import com.github.zly2006.zhihu.theme.ZhihuTheme
 import com.github.zly2006.zhihu.ui.AndroidArticleNavigationHandoff
@@ -355,13 +354,11 @@ class MainActivity : ComponentActivity() {
     private fun handleIntentData(incomingIntent: Intent): Boolean {
         val data = incomingIntent.data ?: return false
         if (data.authority == "zhihu-plus.internal") return true
-        val forceNavigation = incomingIntent.getBooleanExtra(ContentReadingService.READING_NOTIFICATION_INTENT_EXTRA, false)
-        incomingIntent.removeExtra(ContentReadingService.READING_NOTIFICATION_INTENT_EXTRA)
 
         Log.i(TAG, "Intent data: $data")
         val destination = resolveContent(data.toString())
         if (destination != null) {
-            if (forceNavigation || destination != AndroidArticleNavigationHandoff.clipboardDestination) {
+            if (destination != AndroidArticleNavigationHandoff.clipboardDestination) {
                 AndroidArticleNavigationHandoff.markClipboardDestination(destination)
                 navigate(destination, popup = true)
             }

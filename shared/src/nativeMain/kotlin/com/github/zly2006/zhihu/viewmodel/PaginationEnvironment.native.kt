@@ -202,15 +202,17 @@ internal class NativePaginationEnvironment(
     override suspend fun recordOpenEvent(destination: Article, questionId: Long?) =
         recordContentOpenEvent(destination, questionId)
 
-    override suspend fun applyForegroundHomeFeedFilter(items: List<FeedDisplayItem>): List<FeedDisplayItem> {
-        val settings = settingsStore.toFeedFilterSettings()
-        return ForegroundReadFilterPipeline(
-            settings = settings,
-            contentFilterManager = ContentFilterManager(contentFilterDatabase.contentFilterDao()),
-            contentOpenEventDao = contentFilterDatabase.contentOpenEventDao(),
-            blockedFeedRecordDao = contentFilterDatabase.blockedFeedRecordDao(),
-        ).filter(items)
-    }
+    private fun foregroundReadFilterPipeline() = ForegroundReadFilterPipeline(
+        settings = settingsStore.toFeedFilterSettings(),
+        contentFilterManager = ContentFilterManager(contentFilterDatabase.contentFilterDao()),
+        contentOpenEventDao = contentFilterDatabase.contentOpenEventDao(),
+        blockedFeedRecordDao = contentFilterDatabase.blockedFeedRecordDao(),
+    )
+
+    override suspend fun applyForegroundHomeFeedFilter(items: List<FeedDisplayItem>): List<FeedDisplayItem> =
+        foregroundReadFilterPipeline().filter(items)
+
+    override suspend fun recordHomeFeedViews(items: List<FeedDisplayItem>) = foregroundReadFilterPipeline().recordViews(items)
 
     override suspend fun applyBackgroundHomeFeedFilter(items: List<FeedDisplayItem>): List<FeedDisplayItem> {
         val settings = settingsStore.toFeedFilterSettings()
@@ -225,7 +227,6 @@ internal class NativePaginationEnvironment(
                 blockedQuestionDao = contentFilterDatabase.blockedQuestionDao(),
                 blockedTopicDao = contentFilterDatabase.blockedTopicDao(),
                 blockedKeywordService = BlockedKeywordService(
-                    keywordDao = contentFilterDatabase.blockedKeywordDao(),
                     recordDao = contentFilterDatabase.blockedContentRecordDao(),
                     semanticMatcher = null,
                 ),

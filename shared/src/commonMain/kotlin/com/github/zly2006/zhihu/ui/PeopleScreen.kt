@@ -107,7 +107,6 @@ import com.github.zly2006.zhihu.platform.rememberImagePreviewOpener
 import com.github.zly2006.zhihu.platform.rememberSettingsStore
 import com.github.zly2006.zhihu.platform.rememberUserMessageSink
 import com.github.zly2006.zhihu.platform.rememberZhihuWebUrlOpener
-import com.github.zly2006.zhihu.reading.RegisterReadingQueueSource
 import com.github.zly2006.zhihu.ui.components.AuthorBadge
 import com.github.zly2006.zhihu.ui.components.AuthorNoteText
 import com.github.zly2006.zhihu.ui.components.FeedCard
@@ -676,32 +675,6 @@ fun PeopleScreen(
         initialPage = peopleScreenInitialPage(person),
         pageCount = { PEOPLE_SCREEN_TITLES.size },
     )
-    val readingQueueSourceId = when (pagerState.currentPage) {
-        0 -> "people:${person.userTokenOrId}:answers:${viewModel.answersFeedModel.sortBy}"
-        1 -> "people:${person.userTokenOrId}:articles:${viewModel.articlesFeedModel.sortBy}"
-        2 -> "people:${person.userTokenOrId}:activities:${viewModel.activitiesFeedModel.sort}"
-        5 -> "people:${person.userTokenOrId}:pins"
-        else -> null
-    }
-    when (pagerState.currentPage) {
-        0 -> RegisterReadingQueueSource(
-            sourceId = requireNotNull(readingQueueSourceId),
-            items = viewModel.answersFeedModel.allData.map(DataHolder.Answer::toPeopleAnswerDisplayItem),
-        )
-        1 -> RegisterReadingQueueSource(
-            sourceId = requireNotNull(readingQueueSourceId),
-            items = viewModel.articlesFeedModel.allData.map(DataHolder.Article::toPeopleArticleDisplayItem),
-        )
-        2 -> RegisterReadingQueueSource(
-            sourceId = requireNotNull(readingQueueSourceId),
-            items = viewModel.activitiesFeedModel.displayItems,
-        )
-        5 -> RegisterReadingQueueSource(
-            sourceId = requireNotNull(readingQueueSourceId),
-            items = viewModel.pinsFeedModel.allData.mapNotNull(DataHolder.Pin::toPeoplePinDisplayItem),
-        )
-    }
-
     LaunchedEffect(viewModel) {
         try {
             viewModel.load(paginationEnvironment)
@@ -910,7 +883,6 @@ fun PeopleScreen(
                             ) {
                                 FeedCard(
                                     it.toPeopleAnswerDisplayItem(),
-                                    readingQueueSourceId = readingQueueSourceId,
                                     modifier = Modifier.testTag("people_screen_answer_item_${it.id}"),
                                     horizontalPadding = 4.dp,
                                 ) { _, destination ->
@@ -947,7 +919,6 @@ fun PeopleScreen(
                             ) {
                                 FeedCard(
                                     it.toPeopleArticleDisplayItem(),
-                                    readingQueueSourceId = readingQueueSourceId,
                                     modifier = Modifier.testTag("people_screen_article_item_${it.id}"),
                                     horizontalPadding = 4.dp,
                                 ) { _, destination ->
@@ -972,7 +943,6 @@ fun PeopleScreen(
                         ) {
                             FeedCard(
                                 it,
-                                readingQueueSourceId = readingQueueSourceId,
                                 modifier = Modifier.testTag("people_screen_activity_item_${it.stableKey}"),
                                 horizontalPadding = 4.dp,
                             )
@@ -1038,7 +1008,6 @@ fun PeopleScreen(
                             PinListItem(
                                 pin = pin,
                                 itemTag = "people_screen_pin_item_${pin.id}",
-                                readingQueueSourceId = readingQueueSourceId,
                             )
                         }
                     }
@@ -1303,7 +1272,6 @@ private fun QuestionListItem(
 private fun PinListItem(
     pin: DataHolder.Pin,
     itemTag: String? = null,
-    readingQueueSourceId: String? = null,
 ) {
     val navigator = LocalNavigator.current
     Column(
@@ -1315,7 +1283,6 @@ private fun PinListItem(
                     Pin(
                         id = pin.id.toLong(),
                         authorName = pin.author.name,
-                        readingQueueSourceId = readingQueueSourceId,
                     ),
                 )
             }.padding(vertical = 8.dp, horizontal = 4.dp),

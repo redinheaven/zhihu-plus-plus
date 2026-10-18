@@ -62,10 +62,8 @@ import androidx.core.net.toUri
 import androidx.room.RoomDatabase
 import androidx.sqlite.db.SupportSQLiteDatabase
 import com.github.zly2006.zhihu.platform.androidUserMessageSink
-import com.github.zly2006.zhihu.reading.AndroidReadingPlayerBridge
 import com.github.zly2006.zhihu.ui.PREFERENCE_NAME
 import com.github.zly2006.zhihu.ui.components.SettingItem
-import com.github.zly2006.zhihu.ui.rememberArticleTtsState
 import com.github.zly2006.zhihu.util.PowerSaveModeCompat
 import com.github.zly2006.zhihu.viewmodel.filter.OfflineContent
 import com.github.zly2006.zhihu.viewmodel.filter.getContentFilterDatabase
@@ -104,10 +102,8 @@ import com.github.zly2006.zhihu.notification.PREF_NAME as NOTIFICATION_PREF_NAME
 @Composable
 actual fun rememberDeveloperInfo(): DeveloperInfoSnapshot {
     val context = LocalContext.current
-    val ttsState = rememberArticleTtsState()
-    return produceState(initialValue = DeveloperInfoSnapshot(), context, ttsState) {
+    return produceState(initialValue = DeveloperInfoSnapshot(), context) {
         while (true) {
-            val readingState = AndroidReadingPlayerBridge.state.value
             value = DeveloperInfoSnapshot(
                 networkStatus = context.networkStatusText(),
                 powerSaveModeText =
@@ -116,9 +112,6 @@ actual fun rememberDeveloperInfo(): DeveloperInfoSnapshot {
                         PowerSaveModeCompat.HUAWEI_POWER_SAVE -> "省电模式：华为傻逼模式已开启"
                         else -> null
                     },
-                ttsState = ttsState,
-                currentTtsEngineLabel = readingState.engineLabel.ifBlank { "按需初始化" },
-                availableTtsEngineLabels = readingState.availableEngineLabels,
             )
             delay(1_000L)
         }
