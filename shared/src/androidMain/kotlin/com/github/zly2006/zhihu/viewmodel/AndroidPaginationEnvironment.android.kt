@@ -106,9 +106,14 @@ interface AndroidContextPaginationEnvironment : PaginationEnvironment {
     val context: Context
 }
 
-private val ZHIHU_PP_ANDROID_HEADERS = createClientPlugin("ZhihuPPAndroidHeaders", { }) {
+private class ZhihuPPAndroidHeadersConfig {
+    lateinit var context: Context
+}
+
+private val ZHIHU_PP_ANDROID_HEADERS = createClientPlugin("ZhihuPPAndroidHeaders", ::ZhihuPPAndroidHeadersConfig) {
+    val context = pluginConfig.context
     onRequest { request, _ ->
-        request.headers.appendAll(AccountData.ANDROID_HEADERS)
+        request.headers.appendAll(AccountData.androidHeaders(context))
     }
 }
 
@@ -149,7 +154,9 @@ open class SharedAndroidPaginationEnvironment(
             install(UserAgent) {
                 agent = AccountData.ANDROID_USER_AGENT
             }
-            install(ZHIHU_PP_ANDROID_HEADERS)
+            install(ZHIHU_PP_ANDROID_HEADERS) {
+                context = this@SharedAndroidPaginationEnvironment.context
+            }
             if (loginForRecommendation) {
                 install(HttpCookies) {
                     storage = ZhihuCookieStorage(AccountData.data.cookies) {

@@ -219,6 +219,14 @@ class MainActivity : ComponentActivity() {
                         Toast.makeText(this@MainActivity, "数据自动同步失败：${it.message ?: it.javaClass.simpleName}", Toast.LENGTH_LONG).show()
                     }
                 }
+                // 设备身份引导：网页 / Cookie 登录的账号缺 udid，补齐后安卓接口才带 x-udid
+                runCatching {
+                    com.github.zly2006.zhihu.account
+                        .androidZhihuAccountStore(this@MainActivity)
+                        .ensureMobileUdid()
+                }.onFailure {
+                    Log.w(TAG, "设备身份引导失败：${it.message}", it)
+                }
             }
             if (intent.data != null) {
                 if (intent.data!!.authority == "zhihu-plus.internal") {

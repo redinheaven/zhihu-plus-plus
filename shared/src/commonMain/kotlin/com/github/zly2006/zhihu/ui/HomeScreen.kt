@@ -158,6 +158,7 @@ import com.github.zly2006.zhihu.viewmodel.feed.HomeFeedViewModel
 import com.github.zly2006.zhihu.viewmodel.feed.blockableQuestion
 import com.github.zly2006.zhihu.viewmodel.feed.replaceHomeFeedItemsWithFilteredResult
 import com.github.zly2006.zhihu.viewmodel.fetchContentDetail
+import com.github.zly2006.zhihu.viewmodel.getOrFetchContentDetail
 import com.github.zly2006.zhihu.viewmodel.local.LocalHomeFeedViewModel
 import com.github.zly2006.zhihu.viewmodel.postSigned
 import com.github.zly2006.zhihu.viewmodel.rememberPaginationEnvironment
@@ -240,6 +241,7 @@ private class HomeScreenState(
         val feed = newDeferredFeed(mode) ?: return
         prefetchedFeed = mode to feed
         feed.refresh(environment)
+        if (mode != RecommendationMode.WEB) feed.ensureLazyDetailFilter(environment)
     }
 
     /** 进程被杀后切回时，把存在文件里的预取批次放回内存，留给下次手动刷新 */
@@ -320,7 +322,8 @@ private class HomeScreenState(
      * [protectVisible] 为 false 时命中的可见卡片也立刻移除（用户刚加了屏蔽规则，期待马上生效）。
      */
     fun refilter(feed: BaseFeedViewModel, environment: PaginationEnvironment, protectVisible: Boolean) {
-        val items = feed.displayItems.toList()
+        // 只重过滤已经过滤过的（网页推荐卡片、拉过详情的安卓推荐卡片）；还没拉详情的安卓推荐卡片滑到时会按当时的规则过滤，这里不提前去拉
+        val items = feed.displayItems.filter { it.feed != null || it.raw != null }
         viewModelScope.launch(Dispatchers.Default) {
             val filtered = runCatching { environment.applyBackgroundHomeFeedFilter(items) }.getOrElse { return@launch }
             withContext(Dispatchers.Main) {
@@ -602,10 +605,18 @@ fun HomeScreen(
     }
 
     // 记录可见卡片，滚进屏幕的记为看过；后台过滤命中时还在屏幕上的卡片，等滑出屏幕再移除
+    // 安卓推荐、混合推荐：按滑动位置逐步拉详情过滤（见 BaseFeedViewModel.ensureLazyDetailFilter），含冷启动恢复的列表
+    LaunchedEffect(viewModel, currentRecommendationMode) {
+        if (currentRecommendationMode == RecommendationMode.ANDROID || currentRecommendationMode == RecommendationMode.MIXED) {
+            viewModel.ensureLazyDetailFilter(paginationEnvironment)
+        }
+    }
+
     LaunchedEffect(viewModel, currentRecommendationMode) {
         snapshotFlow { listState.layoutInfo.visibleItemsInfo.mapTo(hashSetOf()) { it.key } }.collect { keys ->
             val sync = viewModel.listSync
             sync.visibleItemKeys = keys
+            sync.maxVisibleIndex = viewModel.displayItems.indexOfLast { it.stableKey in keys }
             homeState.markSeen(viewModel.displayItems.filter { it.stableKey in keys }, currentRecommendationMode, paginationEnvironment)
             val leaving = sync.pendingRemovalKeys.filterTo(hashSetOf()) { it !in keys }
             if (leaving.isNotEmpty()) {
@@ -931,7 +942,17 @@ fun HomeScreen(
                                         },
                                     )
                                 }
-                                val topics = when (val raw = item.raw) {
+                                // 网页推荐卡片不再提前拉详情，打开菜单时现查话题（多半命中缓存）
+                                var menuRaw by remember(item.stableKey) { mutableStateOf(item.raw) }
+                                LaunchedEffect(item.stableKey) {
+                                    if (menuRaw == null) {
+                                        menuRaw = item.navDestination?.let { destination ->
+                                            (destination as? Article)?.let { cachedContentDetail(it) }
+                                                ?: paginationEnvironment.getOrFetchContentDetail(destination)
+                                        }
+                                    }
+                                }
+                                val topics = when (val raw = menuRaw) {
                                     is DataHolder.Answer -> raw.question.topics
                                     is DataHolder.Question -> raw.topics
                                     is DataHolder.Article -> raw.topics ?: emptyList()

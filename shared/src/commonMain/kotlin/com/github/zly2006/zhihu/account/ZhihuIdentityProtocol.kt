@@ -30,11 +30,6 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 
-const val ZHIHU_ANDROID_IDENTITY_USER_AGENT =
-    "com.zhihu.android/Futureve/11.2.0 Mozilla/5.0 (Linux; Android 12; sdk_gphone64_arm64 " +
-        "Build/SE1A.220630.001.A1; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 " +
-        "Chrome/57.0.1000.10 Mobile Safari/537.36"
-
 @Serializable
 data class ZhihuIdentityAccount(
     val id: String,
@@ -59,19 +54,19 @@ class ZhihuIdentityApiException(
 
 internal fun io.ktor.client.request.HttpRequestBuilder.applyIdentityHeaders(session: ZhihuAccountSession) {
     accept(ContentType.Application.Json)
-    header(HttpHeaders.UserAgent, ZHIHU_ANDROID_IDENTITY_USER_AGENT)
-    header("x-api-version", "3.0.93")
-    header("x-app-version", "11.2.0")
-    header("x-app-build", "release")
-    header("x-app-bundleid", "com.zhihu.android")
-    header("x-app-flavor", "zhihuwap64")
-    header(
-        "x-app-za",
-        "OS=Android&Release=12&Model=sdk_gphone64_arm64&VersionName=11.2.0&VersionCode=40210&" +
-            "Product=com.zhihu.android&Width=1440&Height=2952&Installer=Market&DeviceType=AndroidPhone&Brand=google",
-    )
-    header("x-network-type", "WiFi")
-    header("x-zse-93", "101_1_1.0")
+    val device = phoneLoginDeviceInfo
+    header(HttpHeaders.UserAgent, ZhihuAndroidAppIdentity.userAgent(device))
+    header("x-api-version", ZhihuAndroidAppIdentity.API_VERSION)
+    header("x-app-version", ZhihuAndroidAppIdentity.VERSION_NAME)
+    header("x-app-build", ZhihuAndroidAppIdentity.BUILD)
+    header("x-app-bundleid", ZhihuAndroidAppIdentity.BUNDLE_ID)
+    header("x-app-flavor", ZhihuAndroidAppIdentity.FLAVOR)
+    header("x-app-za", ZhihuAndroidAppIdentity.xAppZa(device))
+    header("x-network-type", zhihuNetworkTypeName())
+    header("x-zse-93", ZhihuAndroidAppIdentity.ZSE93)
+    session.mobileUdid
+        ?.takeIf { it.isNotBlank() }
+        ?.let { header("x-udid", it) }
     session.mobileAccessToken
         ?.takeIf { it.isNotBlank() }
         ?.let { accessToken ->

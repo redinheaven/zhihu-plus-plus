@@ -23,8 +23,12 @@ import android.util.Log
 import com.github.zly2006.zhihu.account.DEFAULT_ZHIHU_USER_AGENT
 import com.github.zly2006.zhihu.account.ZhihuAccountProfileSnapshot
 import com.github.zly2006.zhihu.account.ZhihuAccountSession
+import com.github.zly2006.zhihu.account.ZhihuAndroidAppIdentity
 import com.github.zly2006.zhihu.account.androidZhihuAccountStore
+import com.github.zly2006.zhihu.account.currentAndroidApplicationContext
 import com.github.zly2006.zhihu.account.currentAndroidZhihuAccountStore
+import com.github.zly2006.zhihu.account.zhihuAndroidDeviceInfo
+import com.github.zly2006.zhihu.account.zhihuNetworkTypeName
 import com.github.zly2006.zhihu.data.Person
 import com.github.zly2006.zhihu.data.ZhihuJson
 import kotlinx.serialization.KSerializer
@@ -38,15 +42,25 @@ import kotlinx.serialization.json.encodeToJsonElement
 object AccountData {
     val json = ZhihuJson.json
 
-    internal val ANDROID_HEADERS = mapOf(
-        "x-api-version" to "3.1.8",
-        "x-app-version" to "10.61.0",
-        "x-app-za" to
-            "OS=Android&Release=12&Model=sdk_gphone64_arm64&VersionName=10.61.0&VersionCode=26107&Product=com.zhihu.android&Width=1440&Height=2952&Installer=%E7%81%B0%E5%BA%A6&DeviceType=AndroidPhone&Brand=google",
-    )
+    /**
+     * 安卓接口（feed / 通知等）的出站头：版本族与 UA 统一走 [ZhihuAndroidAppIdentity]，
+     * 设备相关字段取真实值，udid 有则带（见 ZhihuAccountStore.ensureMobileUdid）。
+     */
+    internal fun androidHeaders(context: Context): Map<String, String> = buildMap {
+        val device = context.zhihuAndroidDeviceInfo()
+        put("x-api-version", ZhihuAndroidAppIdentity.API_VERSION)
+        put("x-app-version", ZhihuAndroidAppIdentity.VERSION_NAME)
+        put("x-app-build", ZhihuAndroidAppIdentity.BUILD)
+        put("x-app-bundleid", ZhihuAndroidAppIdentity.BUNDLE_ID)
+        put("x-app-flavor", ZhihuAndroidAppIdentity.FLAVOR)
+        put("x-app-za", ZhihuAndroidAppIdentity.xAppZa(device))
+        put("x-network-type", zhihuNetworkTypeName())
+        put("x-zse-93", ZhihuAndroidAppIdentity.ZSE93)
+        data.mobileUdid?.takeIf { it.isNotBlank() }?.let { put("x-udid", it) }
+    }
 
-    const val ANDROID_USER_AGENT = "com.zhihu.android/Futureve/10.61.0 Mozilla/5.0 (Linux; Android 12; sdk_gphone64_arm64 " +
-        "Build/SE1A.220630.001.A1; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/57.0.1000.10 Mobile Safari/537.36"
+    val ANDROID_USER_AGENT: String
+        get() = ZhihuAndroidAppIdentity.userAgent(currentAndroidApplicationContext().zhihuAndroidDeviceInfo())
 
     @Serializable
     data class Data(
@@ -59,6 +73,7 @@ object AccountData {
         val mobileRefreshToken: String? = null,
         val mobileTokenType: String? = null,
         val mobileTokenExpiresAt: Long? = null,
+        val mobileUdid: String? = null,
     )
 
     fun loadData(context: Context): Data {
@@ -92,6 +107,7 @@ object AccountData {
         mobileRefreshToken = mobileRefreshToken,
         mobileTokenType = mobileTokenType,
         mobileTokenExpiresAt = mobileTokenExpiresAt,
+        mobileUdid = mobileUdid,
     )
 
     private fun ZhihuAccountSession.toAndroidData(): Data = Data(
@@ -108,6 +124,7 @@ object AccountData {
         mobileRefreshToken = mobileRefreshToken,
         mobileTokenType = mobileTokenType,
         mobileTokenExpiresAt = mobileTokenExpiresAt,
+        mobileUdid = mobileUdid,
     )
 
     /**

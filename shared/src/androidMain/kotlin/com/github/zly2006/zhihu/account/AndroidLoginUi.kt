@@ -21,6 +21,8 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
 import android.graphics.BitmapFactory
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.Environment
 import android.os.StatFs
@@ -67,7 +69,18 @@ actual fun rememberLoginHttpClient(cookies: MutableMap<String, String>): HttpCli
 }
 
 actual val phoneLoginDeviceInfo: ZhihuPhoneLoginDeviceInfo
-    get() = currentAndroidApplicationContext().phoneLoginDeviceInfo()
+    get() = currentAndroidApplicationContext().zhihuAndroidDeviceInfo()
+
+actual fun zhihuNetworkTypeName(): String {
+    val context = currentAndroidApplicationContext()
+    val connectivityManager = context.getSystemService(ConnectivityManager::class.java) ?: return "Other"
+    val capabilities = connectivityManager.getNetworkCapabilities(connectivityManager.activeNetwork) ?: return "Other"
+    return when {
+        capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) -> "WiFi"
+        capabilities.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) -> "4G"
+        else -> "Other"
+    }
+}
 
 actual fun decodePhoneLoginCaptchaImage(content: String) = runCatching {
     val encoded = content.substringAfter("base64,", content)
@@ -150,12 +163,7 @@ private fun configureWebLogin(
         override fun shouldOverrideUrlLoading(
             view: WebView?,
             request: WebResourceRequest,
-        ): Boolean {
-            if (request.url.toString() == ZHIHU_HOME_URL) {
-                webView.settings.userAgentString = AccountData.ANDROID_USER_AGENT
-            }
-            return request.url?.scheme == "zhihu"
-        }
+        ): Boolean = request.url?.scheme == "zhihu"
 
         override fun onPageFinished(view: WebView?, url: String?) {
             super.onPageFinished(view, url)
@@ -207,12 +215,13 @@ private fun readWebViewCookies(url: String?): Map<String, String> =
         CookieManager.getInstance().getCookie(url ?: ZHIHU_HOME_URL).orEmpty(),
     )
 
-private fun Context.phoneLoginDeviceInfo(): ZhihuPhoneLoginDeviceInfo {
+internal fun Context.zhihuAndroidDeviceInfo(): ZhihuPhoneLoginDeviceInfo {
     val runtime = Runtime.getRuntime()
     val storage = StatFs(Environment.getDataDirectory().path)
     val installTime = runCatching {
         packageManager.getPackageInfo(packageName, 0).firstInstallTime
     }.getOrDefault(0L)
+    val metrics = resources.displayMetrics
     return ZhihuPhoneLoginDeviceInfo(
         timezoneOffsetSeconds = TimeZone.getDefault().rawOffset / 1_000L,
         appInstallTimeMillis = installTime,
@@ -221,6 +230,9 @@ private fun Context.phoneLoginDeviceInfo(): ZhihuPhoneLoginDeviceInfo {
         phoneBrand = Build.BRAND,
         phoneModel = Build.MODEL,
         androidRelease = Build.VERSION.RELEASE,
+        buildId = Build.ID,
+        screenWidthPx = metrics.widthPixels,
+        screenHeightPx = metrics.heightPixels,
         cpuType = Build.SUPPORTED_ABIS.firstOrNull().orEmpty(),
         cpuCount = runtime.availableProcessors(),
         cpuUsage = "0.0",

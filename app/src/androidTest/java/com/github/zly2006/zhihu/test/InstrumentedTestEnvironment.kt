@@ -44,6 +44,8 @@ object InstrumentedTestEnvironment {
     fun isMockMode(): Boolean = currentDataMode == DataMode.MOCK
 
     fun reseed(context: Context) {
+        // 先初始化账户 store：AccountData.ANDROID_USER_AGENT 现在依赖真实的设备信息
+        AccountData.loadData(context)
         context
             .getSharedPreferences(PREFERENCE_NAME, Context.MODE_PRIVATE)
             .edit()

@@ -49,9 +49,13 @@ actual val phoneLoginDeviceInfo: ZhihuPhoneLoginDeviceInfo
         appInstallTimeMillis = 0,
         notificationEnabled = false,
         bluetoothAvailable = false,
-        phoneBrand = platformName,
-        phoneModel = platformName,
+        // Apple 平台没有真实安卓设备，整套虚拟成一台自洽的常见机型（与 UA、x-app-za、登录 payload 共用）
+        phoneBrand = "google",
+        phoneModel = "Pixel 6",
         androidRelease = "12",
+        buildId = "SP2A.220505.002",
+        screenWidthPx = 1080,
+        screenHeightPx = 2400,
         cpuType = platformName,
         cpuCount = 1,
         cpuUsage = "0.0",
@@ -60,6 +64,8 @@ actual val phoneLoginDeviceInfo: ZhihuPhoneLoginDeviceInfo
         totalStorageMegabytes = 0,
         freeStorageMegabytes = 0,
     )
+
+actual fun zhihuNetworkTypeName(): String = "WiFi"
 
 actual fun decodePhoneLoginCaptchaImage(content: String) = runCatching {
     val encoded = content.substringAfter("base64,", content)

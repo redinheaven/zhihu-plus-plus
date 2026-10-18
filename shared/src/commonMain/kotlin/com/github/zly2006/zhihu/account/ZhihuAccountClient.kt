@@ -66,6 +66,7 @@ class ZhihuAccountClient internal constructor(
                 mobileRefreshToken = current.mobileRefreshToken,
                 mobileTokenType = current.mobileTokenType,
                 mobileTokenExpiresAt = current.mobileTokenExpiresAt,
+                mobileUdid = current.mobileUdid,
             ).also(::persistSession)
     }
 
@@ -121,6 +122,7 @@ class ZhihuAccountStore internal constructor(
                 mobileRefreshToken = savedSession.mobileRefreshToken,
                 mobileTokenType = savedSession.mobileTokenType,
                 mobileTokenExpiresAt = savedSession.mobileTokenExpiresAt,
+                mobileUdid = savedSession.mobileUdid,
             ) ?: return false
         accountState.select(id, verified)
         replaceClient()
@@ -145,9 +147,26 @@ class ZhihuAccountStore internal constructor(
             mobileRefreshToken = token.refreshToken,
             mobileTokenType = token.tokenType,
             mobileTokenExpiresAt = token.expiresAt,
+            mobileUdid = token.udid,
         ) ?: return false
         selectVerifiedSession(session)
         return true
+    }
+
+    /**
+     * 设备身份引导：账号已登录但缺少 udid（网页 / Cookie 登录路径）时，
+     * 通过游客初始化补一个并保存，后续所有安卓接口带上 x-udid。失败交给调用方决定是否提示。
+     */
+    suspend fun ensureMobileUdid() {
+        val current = session
+        if (!current.login || current.mobileUdid != null) return
+        val loginClient = ZhihuPhoneLoginClient()
+        val udid = try {
+            loginClient.fetchDeviceUdid()
+        } finally {
+            loginClient.close()
+        }
+        save(current.copy(mobileUdid = udid))
     }
 
     private fun selectVerifiedSession(session: ZhihuAccountSession) {

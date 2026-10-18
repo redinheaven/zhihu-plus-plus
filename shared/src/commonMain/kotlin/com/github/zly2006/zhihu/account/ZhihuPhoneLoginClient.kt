@@ -54,17 +54,13 @@ private const val CLOUD_APP_ID = "1355"
 private const val CLOUD_APP_SECRET = "dd49a835-56e7-4a0f-95b5-efd51ea5397f"
 private const val CLOUD_SIGN_VERSION = "2"
 
-const val ZHIHU_ANDROID_PHONE_LOGIN_USER_AGENT =
-    "com.zhihu.android/Futureve/11.4.0 Mozilla/5.0 (Linux; Android 12; Android SDK built for arm64 " +
-        "Build/SE1A.220621.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 " +
-        "Chrome/57.0.1000.10 Mobile Safari/537.36"
-
 data class ZhihuMobileLoginToken(
     val accessToken: String,
     val refreshToken: String?,
     val tokenType: String,
     val expiresAt: Long?,
     val cookies: Map<String, String>,
+    val udid: String? = null,
 )
 
 data class ZhihuPhoneLoginDeviceInfo(
@@ -75,6 +71,9 @@ data class ZhihuPhoneLoginDeviceInfo(
     val phoneBrand: String,
     val phoneModel: String,
     val androidRelease: String,
+    val buildId: String,
+    val screenWidthPx: Int,
+    val screenHeightPx: Int,
     val cpuType: String,
     val cpuCount: Int,
     val cpuUsage: String,
@@ -100,11 +99,20 @@ sealed interface ZhihuPhoneDigitsResult {
  */
 class ZhihuPhoneLoginClient : AutoCloseable {
     private val cookies = phoneLoginCookiesForTesting ?: mutableMapOf()
-    private val httpClient = createAccountHttpClient(cookies, ZHIHU_ANDROID_PHONE_LOGIN_USER_AGENT)
     private val deviceInfo = phoneLoginDeviceInfoForTesting ?: phoneLoginDeviceInfo
+    private val httpClient = createAccountHttpClient(cookies, ZhihuAndroidAppIdentity.userAgent(deviceInfo))
     private var authorization = "oauth $MOBILE_CLIENT_ID"
     private var deviceId: String? = null
     private var webDeviceCookie = cookies.remove("d_c0")?.takeIf(String::isNotBlank)
+
+    /**
+     * 仅做设备身份引导：走游客初始化拿到 udid 后返回，不登录、不保留游客凭证。
+     * 供网页 / Cookie 登录的账号补齐 x-udid（见 ZhihuAccountStore.ensureMobileUdid）。
+     */
+    suspend fun fetchDeviceUdid(): String {
+        ensureGuestToken()
+        return checkNotNull(deviceId) { "服务器未返回设备凭证" }
+    }
 
     suspend fun requestDigits(phoneNumber: String): ZhihuPhoneDigitsResult {
         val username = normalizePhoneNumber(phoneNumber)
@@ -230,6 +238,7 @@ class ZhihuPhoneLoginClient : AutoCloseable {
             tokenType = token.tokenType,
             expiresAt = token.expiresIn?.let(timestamp::plus),
             cookies = cookies.toMap(),
+            udid = deviceId,
         )
     }
 
@@ -256,10 +265,10 @@ class ZhihuPhoneLoginClient : AutoCloseable {
         val timestamp = currentEpochSeconds().toString()
         val form = Parameters
             .build {
-                append("app_build", "40408")
+                append("app_build", ZhihuAndroidAppIdentity.VERSION_CODE)
                 append("app_install_time", deviceInfo.appInstallTimeMillis.toString())
                 append("app_ticket", "interface is empty")
-                append("app_version", "11.4.0")
+                append("app_version", ZhihuAndroidAppIdentity.VERSION_NAME)
                 append("bt_ck", if (deviceInfo.bluetoothAvailable) "1" else "0")
                 append("bundle_id", MOBILE_SOURCE)
                 append("cp_ct", deviceInfo.cpuCount.toString())
@@ -324,26 +333,20 @@ class ZhihuPhoneLoginClient : AutoCloseable {
 
     private fun HttpRequestBuilder.applyMobileHeaders() {
         accept(ContentType.Application.Json)
-        header(HttpHeaders.UserAgent, ZHIHU_ANDROID_PHONE_LOGIN_USER_AGENT)
         header(HttpHeaders.Authorization, authorization)
         cookies.toCookieHeaderString().takeIf(String::isNotBlank)?.let {
             header(HttpHeaders.Cookie, it)
         }
         deviceId?.let { header("x-udid", it) }
-        header("x-api-version", "3.0.93")
-        header("x-app-version", "11.4.0")
-        header("x-app-build", "release")
-        header("x-app-bundleid", MOBILE_SOURCE)
-        header("x-app-flavor", "honor")
-        header(
-            "x-app-za",
-            "OS=Android&Release=12&Model=Android+SDK+built+for+arm64&VersionName=11.4.0&VersionCode=40408&" +
-                "Product=com.zhihu.android&Width=1080&Height=2274&Installer=%E8%8D%A3%E8%80%80%E5%95%86%E5%BA%97&" +
-                "DeviceType=AndroidPhone&Brand=Android",
-        )
-        header("x-network-type", "3G")
+        header("x-api-version", ZhihuAndroidAppIdentity.API_VERSION)
+        header("x-app-version", ZhihuAndroidAppIdentity.VERSION_NAME)
+        header("x-app-build", ZhihuAndroidAppIdentity.BUILD)
+        header("x-app-bundleid", ZhihuAndroidAppIdentity.BUNDLE_ID)
+        header("x-app-flavor", ZhihuAndroidAppIdentity.FLAVOR)
+        header("x-app-za", ZhihuAndroidAppIdentity.xAppZa(deviceInfo))
+        header("x-network-type", zhihuNetworkTypeName())
         header("x-page-id", "44")
-        header("x-zse-93", "101_1_1.0")
+        header("x-zse-93", ZhihuAndroidAppIdentity.ZSE93)
     }
 
     private fun HttpRequestBuilder.setEncryptedForm(vararg entries: Pair<String, String>) {

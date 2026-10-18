@@ -20,6 +20,7 @@ package com.github.zly2006.zhihu.viewmodel.filter
 import com.fleeksoft.ksoup.Ksoup
 import com.github.zly2006.zhihu.data.AdvertisementFeed
 import com.github.zly2006.zhihu.data.DataHolder
+import com.github.zly2006.zhihu.data.Feed
 import com.github.zly2006.zhihu.data.FeedDisplayItem
 import com.github.zly2006.zhihu.data.hasIdentityCertification
 import com.github.zly2006.zhihu.data.navDestination
@@ -113,6 +114,8 @@ class FeedContentFilterPipeline(
     private val blockedKeywordService: BlockedKeywordService,
     private val onNlpBlocked: suspend (List<FilterableContent>) -> Unit = {},
 ) {
+    suspend fun topicBlockingActive(): Boolean = settings.enableTopicBlocking && blockedTopicDao.getTopicCount() > 0
+
     suspend fun filter(contents: List<FilterableContent>): FeedContentFilterResult {
         val blocked = mutableListOf<Pair<FilterableContent, String>>()
         var filteredContents = contents
@@ -286,12 +289,19 @@ class FeedDisplayFilterPipeline(
             emptyList<FeedDisplayItem>() to items
         }
 
+        // 本 fork：网页推荐的回答卡片自带全文、作者和所属问题（实测与详情接口逐字一致），不再逐条拉详情；
+        // 只有开了话题屏蔽时要拉，因为卡片里的 bound_topic_ids 和话题屏蔽用的话题 ID 是两套编号
+        val topicBlockingActive = contentFilterPipeline.topicBlockingActive()
         val itemToFilterableMap = coroutineScope {
             otherItems
                 .map { item ->
                     async {
                         val identity = item.resolveContentIdentity()
-                        val rawContent = resolveRawContent(item)
+                        val rawContent = if (!topicBlockingActive && item.feedAnswerContent() != null) {
+                            DataHolder.DummyContent
+                        } else {
+                            resolveRawContent(item)
+                        }
 
                         if (rawContent is DataHolder.DummyContent) {
                             Log.w("ContentFilterExtensions", "Failed to fetch content details for item '${item.title}'. Using dummy content for filtering.")
@@ -334,9 +344,9 @@ class FeedDisplayFilterPipeline(
             if (contentId in filteredContentIds) {
                 val (_, raw) = itemToRawMap[contentId] ?: (null to null)
                 item.copy(
-                    raw = raw,
-                    wordCount = (raw as? DataHolder.Answer)?.let { answer ->
-                        Ksoup.parse(answer.content).text().count { !it.isWhitespace() }
+                    raw = raw?.takeUnless { it is DataHolder.DummyContent },
+                    wordCount = ((raw as? DataHolder.Answer)?.content ?: item.feedAnswerContent())?.let { html ->
+                        Ksoup.parse(html).text().count { !it.isWhitespace() }
                     },
                 )
             } else {
@@ -455,13 +465,13 @@ fun FeedDisplayItem.toFilterableContent(
         is DataHolder.Article -> rawContent.content
         is DataHolder.Pin -> rawContent.contentHtml
         else -> null
-    } ?: content ?: summary,
+    } ?: content ?: feedAnswerContent() ?: summary,
     authorName = authorName,
-    authorId = rawContent.author?.id,
+    authorId = rawContent.author?.id ?: feed?.target?.author?.id,
     contentId = identity.id,
     contentType = identity.type,
     raw = rawContent,
-    isFollowing = rawContent.author?.isFollowing ?: false,
+    isFollowing = rawContent.author?.isFollowing ?: feed?.target?.author?.isFollowing ?: false,
     authorCertified = feed
         ?.target
         ?.author
@@ -487,6 +497,9 @@ fun FeedDisplayItem.toFilterableContent(
     feedJson = feed?.let { runCatching { feedFilterRecordJson.encodeToString(it) }.getOrNull() },
     navDestinationJson = navDestination?.let { runCatching { feedFilterRecordJson.encodeToString(it) }.getOrNull() },
 )
+
+/** 网页推荐回答卡片自带的全文；安卓推荐卡片、其他类型为 null */
+private fun FeedDisplayItem.feedAnswerContent(): String? = (feed?.target as? Feed.AnswerTarget)?.content?.takeIf { it.isNotBlank() }
 
 /** 从内容实体中提取主题 ID 列表，供 feed 过滤阶段的主题规则使用。 */
 fun extractTopicIds(raw: DataHolder.Content): List<String>? = when (raw) {

@@ -62,11 +62,40 @@ class ZhihuAccountRepositoryTest {
             mobileRefreshToken = "mobile-refresh",
             mobileTokenType = "bearer",
             mobileTokenExpiresAt = 123456789L,
+            mobileUdid = "device-udid",
         )
 
         repository.save(session)
 
         assertEquals(session, repository.load())
+    }
+
+    @Test
+    fun loadMigratesLegacyUbuntuUserAgentToCurrentDefault() {
+        val legacyUserAgent =
+            "Mozilla/5.0 (X11; U; Linux x86_64; en-US) AppleWebKit/540.0 (KHTML, like Gecko) Ubuntu/10.10 Chrome/9.1.0.0 Safari/540.0"
+        val store = InMemoryAccountSessionStore(
+            ZhihuJson.json.encodeToString(
+                ZhihuAccountSession(login = true, username = "alice", userAgent = legacyUserAgent),
+            ),
+        )
+
+        val session = ZhihuAccountRepository(store).load()
+
+        assertEquals(DEFAULT_ZHIHU_USER_AGENT, session.userAgent)
+    }
+
+    @Test
+    fun loadKeepsCustomUserAgent() {
+        val store = InMemoryAccountSessionStore(
+            ZhihuJson.json.encodeToString(
+                ZhihuAccountSession(login = true, username = "alice", userAgent = "custom-agent"),
+            ),
+        )
+
+        val session = ZhihuAccountRepository(store).load()
+
+        assertEquals("custom-agent", session.userAgent)
     }
 
     @Test

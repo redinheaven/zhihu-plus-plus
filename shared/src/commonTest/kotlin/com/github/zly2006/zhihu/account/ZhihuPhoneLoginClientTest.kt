@@ -82,15 +82,13 @@ class ZhihuPhoneLoginClientTest {
                             "32a3795d4beccbacb11cb806d67e155158e3566a",
                             request.headers["x-req-signature"],
                         )
-                        assertEquals("11.4.0", request.headers["x-app-version"])
+                        assertEquals(ZhihuAndroidAppIdentity.VERSION_NAME, request.headers["x-app-version"])
                         assertEquals("44", request.headers["x-page-id"])
-                        assertEquals("101_1_1.0", request.headers["x-zse-93"])
-                        assertTrue(
-                            request.headers[HttpHeaders.UserAgent]
-                                .orEmpty()
-                                .contains("Android SDK built for arm64"),
-                        )
-                        assertTrue(request.headers["x-app-za"].orEmpty().contains("Width=1080&Height=2274"))
+                        assertEquals(ZhihuAndroidAppIdentity.ZSE93, request.headers["x-zse-93"])
+                        assertEquals(ZhihuAndroidAppIdentity.userAgent(DEVICE_INFO), request.headers[HttpHeaders.UserAgent])
+                        val appZa = request.headers["x-app-za"].orEmpty()
+                        assertEquals(ZhihuAndroidAppIdentity.xAppZa(DEVICE_INFO), appZa)
+                        assertTrue("Installer" !in appZa)
                         assertEncryptedBody(DEVICE_FORM, request.body)
                         respondJson(
                             """
@@ -360,6 +358,31 @@ class ZhihuPhoneLoginClientTest {
         client.close()
     }
 
+    @Test
+    fun fetchDeviceUdidOnlyInitializesGuestIdentity() = runTest {
+        val cookies = mutableMapOf<String, String>()
+        var requestIndex = 0
+        val client = phoneLoginTestClient(
+            MockEngine { request ->
+                requestIndex++
+                when (requestIndex) {
+                    1 -> respond(
+                        content = "web-device-id",
+                        headers = headersOf(HttpHeaders.SetCookie, "d_c0=device-cookie; Path=/; Domain=zhihu.com"),
+                    )
+
+                    2 -> respondJson(INITIALIZATION_RESPONSE)
+
+                    else -> error("Unexpected request #$requestIndex")
+                }
+            },
+            cookies,
+        )
+        assertEquals("device-id", client.fetchDeviceUdid())
+        assertEquals(2, requestIndex)
+        client.close()
+    }
+
     private fun phoneLoginTestClient(
         engine: MockEngine,
         cookies: MutableMap<String, String>,
@@ -399,6 +422,9 @@ class ZhihuPhoneLoginClientTest {
             phoneBrand = "Android",
             phoneModel = "Android SDK built for arm64",
             androidRelease = "12",
+            buildId = "SE1A.220621.001",
+            screenWidthPx = 1080,
+            screenHeightPx = 2274,
             cpuType = "aarch64",
             cpuCount = 4,
             cpuUsage = "0.0",

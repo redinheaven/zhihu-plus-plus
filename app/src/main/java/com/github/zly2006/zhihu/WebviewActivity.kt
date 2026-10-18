@@ -65,7 +65,6 @@ class WebviewActivity : ComponentActivity() {
                             }
                         } // 覆盖掉原有的 WebViewClient，因为我们需要全屏显示
                         setupCookies(webView)
-                        webView.settings.userAgentString = AccountData.ANDROID_USER_AGENT
                         @SuppressLint("SetJavaScriptEnabled")
                         webView.settings.javaScriptEnabled = true
                         webView.loadUrl(url)
@@ -118,7 +117,6 @@ class WebviewActivity : ComponentActivity() {
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest): Boolean = request.url.scheme == "zhihu" &&
                 request.url.host == "webviewform"
         }
-        webView.settings.userAgentString = AccountData.ANDROID_USER_AGENT
         cookieManager.flush()
     }
 }

@@ -37,6 +37,7 @@ import com.github.zly2006.zhihu.util.Log
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.io.buffered
@@ -145,6 +146,7 @@ class CollectionSearchViewModel : ViewModel() {
                         val paging = json["paging"]?.let { ZhihuJson.decodeJson<ZhihuPaging>(it) } ?: break
                         if (paging.isEnd || paging.next.isBlank()) break
                         url = paging.next
+                        delay(NETWORK_INTERVAL_MS)
                     }
                 }
 
@@ -166,9 +168,13 @@ class CollectionSearchViewModel : ViewModel() {
                 missing.forEachIndexed { index, article ->
                     withContext(Dispatchers.Main) { syncProgress = index to missing.size }
                     val detail = cachedContentDetail(article)
-                        ?: runCatching {
-                            fetchZhihuContentDetail(article, prefetchImages = false) { url, include -> environment.fetchJson(url, include) }
-                        }.getOrNull()
+                        ?: run {
+                            // 联网拉的放慢，不在几分钟里连发几百个请求
+                            delay(NETWORK_INTERVAL_MS)
+                            runCatching {
+                                fetchZhihuContentDetail(article, prefetchImages = false) { url, include -> environment.fetchJson(url, include) }
+                            }.getOrNull()
+                        }
                     val (title, html) = when (detail) {
                         is DataHolder.Answer -> detail.question.title to detail.content
                         is DataHolder.Article -> detail.title to detail.content
@@ -211,6 +217,7 @@ class CollectionSearchViewModel : ViewModel() {
 
     private companion object {
         const val MAX_HITS = 300
+        const val NETWORK_INTERVAL_MS = 1_500L
         val SENTENCE_END = Regex("(?<=[。！？!?；;])")
     }
 }

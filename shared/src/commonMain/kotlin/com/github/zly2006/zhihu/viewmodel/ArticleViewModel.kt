@@ -205,6 +205,15 @@ class ArticleViewModel(
     // todo: replace this with sqlite
     open class ArticlesSharedData : ArticleAnswerSwitchData()
 
+    /**
+     * 本 fork：打开时先显示缓存的正文，联网拿到的新版文字没变（只是图片地址参数等不同）时不替换，
+     * 否则整篇正文重新解析排版、闪一下；回答被编辑过（文字变了）才换
+     */
+    private fun updateContent(html: String) {
+        if (content.isNotEmpty() && Ksoup.parse(content).text() == Ksoup.parse(html).text()) return
+        content = html
+    }
+
     @OptIn(ExperimentalStdlibApi::class)
     fun loadArticle(environment: ArticleLoadEnvironment) {
         if (httpClient == null) return
@@ -221,18 +230,20 @@ class ArticleViewModel(
                             authorId = answer.author.id
                             authorUrlToken = answer.author.urlToken
                             // 本 fork 不显示段评划线；去掉开头单独成段的「谢邀 @XX」
-                            content = answer.content.let { html ->
-                                val doc = Ksoup.parseBodyFragment(html).apply { outputSettings().prettyPrint(false) }
-                                val body = doc.body()
-                                val first = body.children().firstOrNull()
-                                val firstText = first?.text()?.trim().orEmpty()
-                                if (first != null && firstText.length <= 40 && thanksForInvitePrefixes.any(firstText::startsWith)) {
-                                    first.remove()
-                                    body.html()
-                                } else {
-                                    html
-                                }
-                            }
+                            updateContent(
+                                answer.content.let { html ->
+                                    val doc = Ksoup.parseBodyFragment(html).apply { outputSettings().prettyPrint(false) }
+                                    val body = doc.body()
+                                    val first = body.children().firstOrNull()
+                                    val firstText = first?.text()?.trim().orEmpty()
+                                    if (first != null && firstText.length <= 40 && thanksForInvitePrefixes.any(firstText::startsWith)) {
+                                        first.remove()
+                                        body.html()
+                                    } else {
+                                        html
+                                    }
+                                },
+                            )
                             attachment = answer.attachment
                             authorBio = answer.author.headline
                             authorAvatarSrc = authorAvatarSrc.ifEmpty { answer.author.avatarUrl }
@@ -308,7 +319,7 @@ class ArticleViewModel(
                             endorsements = emptyList()
                             exportSourceContent = article
                             title = article.title
-                            content = article.content // 本 fork 不显示段评划线
+                            updateContent(article.content) // 本 fork 不显示段评划线
                             voteUpCount = article.voteupCount
                             votersTotal = article.voteupCount
                             commentCount = article.commentCount

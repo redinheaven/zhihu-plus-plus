@@ -18,6 +18,9 @@
 package com.github.zly2006.zhihu.data
 
 import com.github.zly2006.zhihu.account.DEFAULT_ZHIHU_USER_AGENT
+import com.github.zly2006.zhihu.account.DESKTOP_SEC_CH_UA
+import com.github.zly2006.zhihu.account.DESKTOP_SEC_CH_UA_MOBILE
+import com.github.zly2006.zhihu.account.DESKTOP_SEC_CH_UA_PLATFORM
 import com.github.zly2006.zhihu.account.ZhihuAccountProfileSnapshot
 import com.github.zly2006.zhihu.account.ZhihuAccountSession
 import com.github.zly2006.zhihu.navigation.Article
@@ -29,6 +32,7 @@ import com.github.zly2006.zhihu.util.jsonObject
 import io.ktor.client.HttpClient
 import io.ktor.client.HttpClientConfig
 import io.ktor.client.engine.HttpClientEngineConfig
+import io.ktor.client.plugins.DefaultRequest
 import io.ktor.client.plugins.UserAgent
 import io.ktor.client.plugins.cache.HttpCache
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
@@ -87,6 +91,12 @@ fun <T : HttpClientEngineConfig> HttpClientConfig<T>.installZhihuCommonClientCon
     }
     install(UserAgent) {
         agent = userAgent
+    }
+    // UA 自称桌面 Chrome，补上浏览器都会带的高熵客户端提示，避免「Chrome UA 没有 sec-ch-ua」这种单一规则命中
+    install(DefaultRequest) {
+        header("sec-ch-ua", DESKTOP_SEC_CH_UA)
+        header("sec-ch-ua-mobile", DESKTOP_SEC_CH_UA_MOBILE)
+        header("sec-ch-ua-platform", DESKTOP_SEC_CH_UA_PLATFORM)
     }
 }
 

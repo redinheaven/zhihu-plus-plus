@@ -112,27 +112,30 @@ class AndroidHomeFeedViewModel :
                         null
                     }
 
-                    // 后台过滤要逐条拉详情，单独跑，不让下一页、下拉刷新圈等它
-                    viewModelScope.launch(Dispatchers.Default) {
-                        try {
-                            val filteredItems = environment.applyBackgroundHomeFeedFilter(foregroundItems)
-                            if (reverseBlock) {
+                    // 后台过滤要逐条拉详情。正常模式由列表按滑动位置逐步拉（见 BaseFeedViewModel.ensureLazyDetailFilter）；
+                    // 反向屏蔽只显示命中的，要整页过滤完才知道显示哪些
+                    if (!reverseBlock) {
+                        withContext(Dispatchers.Main) { latestLoadedDisplayItems.value = foregroundItems }
+                    } else {
+                        viewModelScope.launch(Dispatchers.Default) {
+                            try {
+                                val filteredItems = environment.applyBackgroundHomeFeedFilter(foregroundItems)
                                 withContext(Dispatchers.Main) { addDisplayItems(filteredItems) }
-                            }
 
-                            val filterResult = HomeFeedFilterResult(
-                                foregroundItems = foregroundItems,
-                                filteredItems = filteredItems,
-                                reverseBlock = reverseBlock,
-                            )
+                                val filterResult = HomeFeedFilterResult(
+                                    foregroundItems = foregroundItems,
+                                    filteredItems = filteredItems,
+                                    reverseBlock = reverseBlock,
+                                )
 
-                            // 移除被过滤的条目，并更新已保留条目的 raw 内容
-                            withContext(Dispatchers.Main) {
-                                listSync.pendingRemovalKeys += displayItems.replaceHomeFeedItemsWithFilteredResult(filterResult, listSync.visibleItemKeys)
-                                latestLoadedDisplayItems.value = filterResult.filteredItems
+                                // 移除被过滤的条目，并更新已保留条目的 raw 内容
+                                withContext(Dispatchers.Main) {
+                                    listSync.pendingRemovalKeys += displayItems.replaceHomeFeedItemsWithFilteredResult(filterResult, listSync.visibleItemKeys)
+                                    latestLoadedDisplayItems.value = filterResult.filteredItems
+                                }
+                            } catch (e: Exception) {
+                                if (e !is CancellationException) environment.handleMobileHomeFeedFailure(e)
                             }
-                        } catch (e: Exception) {
-                            if (e !is CancellationException) environment.handleMobileHomeFeedFailure(e)
                         }
                     }
                 }

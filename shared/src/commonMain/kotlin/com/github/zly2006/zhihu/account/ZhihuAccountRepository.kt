@@ -23,7 +23,12 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 
-const val DEFAULT_ZHIHU_USER_AGENT =
+const val DEFAULT_ZHIHU_USER_AGENT = ZHIHU_DESKTOP_USER_AGENT
+
+/**
+ * 早年版本使用的 Web UA（Ubuntu Chrome 9），已经不具备真实性；读取账号时迁移成新的默认值。
+ */
+private const val LEGACY_ZHIHU_USER_AGENT =
     "Mozilla/5.0 (X11; U; Linux x86_64; en-US) AppleWebKit/540.0 (KHTML, like Gecko) Ubuntu/10.10 Chrome/9.1.0.0 Safari/540.0"
 
 @Serializable
@@ -47,6 +52,7 @@ data class ZhihuAccountSession(
     val mobileRefreshToken: String? = null,
     val mobileTokenType: String? = null,
     val mobileTokenExpiresAt: Long? = null,
+    val mobileUdid: String? = null,
 )
 
 @Serializable
@@ -82,17 +88,24 @@ class ZhihuAccountRepository(
         val text = store.readText()?.takeIf { it.isNotBlank() } ?: return@runCatching ZhihuAccounts()
         val element = json.parseToJsonElement(text)
         if (element is JsonObject && "accounts" in element) {
-            json.decodeFromString<ZhihuAccounts>(text)
+            json.decodeFromString<ZhihuAccounts>(text).let { accounts ->
+                accounts.copy(
+                    accounts = accounts.accounts.map { it.copy(session = it.session.withMigratedUserAgent()) },
+                )
+            }
         } else {
             val session = json.decodeFromString<ZhihuAccountSession>(text)
             if (session.login) {
                 val id = session.accountSlotId()
-                ZhihuAccounts(id, listOf(ZhihuSavedAccount(id, session)))
+                ZhihuAccounts(id, listOf(ZhihuSavedAccount(id, session.withMigratedUserAgent())))
             } else {
                 ZhihuAccounts()
             }
         }
     }.getOrDefault(ZhihuAccounts())
+
+    private fun ZhihuAccountSession.withMigratedUserAgent(): ZhihuAccountSession =
+        if (userAgent == LEGACY_ZHIHU_USER_AGENT) copy(userAgent = DEFAULT_ZHIHU_USER_AGENT) else this
 
     fun load(): ZhihuAccountSession = loadAccounts().session
 

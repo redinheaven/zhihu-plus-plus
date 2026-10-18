@@ -148,8 +148,8 @@ private var offlineContentPruned = false
 
 /**
  * 保存一条内容详情 JSON 供离线阅读，并预下载作者头像。
- * 正文图片只在 [prefetchImages]（用户真正打开内容）时预下载：首页过滤会拉每张卡片的详情，
- * 若都下载正文图片，刷一次首页就要下几十篇回答的全部图片，还会把真正看过的图片挤出磁盘缓存。
+ * 正文图片只在 [prefetchImages]（用户真正打开内容）时预下载：首页过滤、收藏夹建索引也会拉详情，
+ * 若都下载正文图片，会下大量没人看的图片，还会把真正看过的图片挤出磁盘缓存。
  */
 private suspend fun saveOfflineContent(key: String, type: String, json: JsonObject, prefetchImages: Boolean) {
     runCatching {
