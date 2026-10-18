@@ -22,7 +22,6 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.viewModelScope
 import com.github.zly2006.zhihu.data.DataHolder
 import com.github.zly2006.zhihu.data.Feed
@@ -48,9 +47,7 @@ import com.github.zly2006.zhihu.viewmodel.filter.ContentDetailProvider
 import com.github.zly2006.zhihu.viewmodel.filter.getContentFilterDatabase
 import com.github.zly2006.zhihu.viewmodel.filter.resolveContentIdentity
 import com.github.zly2006.zhihu.viewmodel.getOrFetchContentDetail
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
@@ -65,43 +62,7 @@ abstract class BaseFeedViewModel : PaginationViewModel<Feed>(typeOf<Feed>()) {
     var isPullToRefresh by mutableStateOf(false)
         protected set
 
-    /** 和 [displayItems] 一样，混合推荐让两个子 ViewModel 共用父 ViewModel 的这一份 */
     internal var listSync = FeedListSync()
-
-    private var lazyDetailFilterJob: Job? = null
-
-    /**
-     * 本 fork：安卓推荐卡片不带全文、作者 ID 和所属问题，后台过滤要逐条拉详情。不再整页一次拉完，只拉列表里滑到附近的
-     * （最后一张可见卡片往下 [DETAIL_LOOKAHEAD] 张以内），没划到就被刷新掉的不拉；还没显示的预取列表只拉开头几张。
-     * 每个列表只跑一个，重复调用无效。
-     */
-    fun ensureLazyDetailFilter(environment: PaginationEnvironment) {
-        if (lazyDetailFilterJob?.isActive == true) return
-        lazyDetailFilterJob = viewModelScope.launch(Dispatchers.Default) {
-            val attempted = hashSetOf<String>()
-            snapshotFlow {
-                displayItems
-                    .take(listSync.maxVisibleIndex + 1 + DETAIL_LOOKAHEAD)
-                    .filter { it.raw == null && it.feed == null && it.navDestinationJson != null && !it.isFiltered && it.stableKey !in attempted }
-            }.collect { batch ->
-                if (batch.isEmpty()) return@collect
-                batch.mapTo(attempted) { it.stableKey }
-                val filtered = try {
-                    environment.applyBackgroundHomeFeedFilter(batch)
-                } catch (e: Exception) {
-                    if (e is CancellationException) throw e
-                    return@collect
-                }
-                withContext(Dispatchers.Main) {
-                    listSync.pendingRemovalKeys += displayItems.replaceHomeFeedItemsWithFilteredResult(
-                        HomeFeedFilterResult(foregroundItems = batch, filteredItems = filtered, reverseBlock = false),
-                        listSync.visibleItemKeys,
-                    )
-                    latestLoadedDisplayItems.value = displayItems.toList()
-                }
-            }
-        }
-    }
 
     override fun processResponse(environment: PaginationEnvironment, data: List<Feed>, rawData: JsonArray) {
         super.processResponse(environment, data, rawData)
@@ -315,17 +276,11 @@ class FeedListSync {
      * 记进 [pendingRemovalKeys]，等滑出屏幕再由列表页移除，免得正在看的卡片突然消失、整个列表往上跳。
      */
     var visibleItemKeys: Set<Any> = emptySet()
-
-    /** 列表里最后一张可见卡片的位置，-1 为没显示；[BaseFeedViewModel.ensureLazyDetailFilter] 据此决定拉到哪张 */
-    var maxVisibleIndex by mutableIntStateOf(-1)
     val pendingRemovalKeys = mutableSetOf<String>()
 
     /** 下拉刷新时旧列表先留着，等新的第一页到了再整体替换，刷新期间不出现空白 */
     var replaceOnNextAdd = false
 }
-
-/** 可见卡片往下预先拉详情、过滤的张数，保证正常滑动时卡片露面前已经过滤好 */
-private const val DETAIL_LOOKAHEAD = 6
 
 /** 卡片所属的问题（回答取其所在问题）的 ID 和标题，供「屏蔽问题」使用；文章、想法等返回 null。 */
 fun FeedDisplayItem.blockableQuestion(): Pair<Long, String>? = when (val raw = raw) {

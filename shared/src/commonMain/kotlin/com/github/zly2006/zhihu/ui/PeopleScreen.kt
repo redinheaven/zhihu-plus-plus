@@ -117,7 +117,6 @@ import com.github.zly2006.zhihu.ui.components.USER_NOTE_MAX_LENGTH
 import com.github.zly2006.zhihu.ui.components.UserNotes
 import com.github.zly2006.zhihu.ui.components.pageTurnViewportWithGuide
 import com.github.zly2006.zhihu.ui.components.rememberPageTurnTarget
-import com.github.zly2006.zhihu.util.Log
 import com.github.zly2006.zhihu.util.jsonObject
 import com.github.zly2006.zhihu.util.raiseForStatus
 import com.github.zly2006.zhihu.viewmodel.ContentBlocklistEnvironment
@@ -215,9 +214,7 @@ class PeopleFollowersViewModel(
         typeOf<DataHolder.People>(),
     ) {
     override val initialUrl: String
-        // 签名有bug，暂时无法使用新的API，先回退到旧的API
-        // get() = "https://www.zhihu.com/api/v4/members/${person.userTokenOrId}/followers"
-        get() = "https://api.zhihu.com/people/${person.id}/followers"
+        get() = "https://www.zhihu.com/api/v4/members/${person.userTokenOrId}/followers"
 
     override val include: String
         get() = "data[*].answer_count,articles_count,gender,follower_count,is_followed,is_following,badge_v2,badge[?(type=best_answerer)].topics"
@@ -365,7 +362,6 @@ class PersonViewModel(
     var headline by mutableStateOf("")
     var officialBadge by mutableStateOf<OfficialBadge?>(null)
     var officialBadgeDetails by mutableStateOf<List<OfficialBadge>>(emptyList())
-    var githubSocial by mutableStateOf<GithubSocialUiState?>(null)
     var followerCount by mutableIntStateOf(0)
     var followingCount by mutableIntStateOf(0)
     var answerCount by mutableIntStateOf(0)
@@ -459,7 +455,8 @@ class PersonViewModel(
     suspend fun load(environment: ProfileLoadEnvironment) {
         environment.addReadHistory(person.id, "profile")
 
-        val profileUrl = "https://api.zhihu.com/people/${person.urlToken.takeIf(String::isNotBlank) ?: person.id}"
+        // 网页端的成员接口（www.zhihu.com/api/v4/members），api.zhihu.com/people 是 App 用的
+        val profileUrl = "https://www.zhihu.com/api/v4/members/${person.userTokenOrId}"
         val jojo = environment.fetchJson(profileUrl, PEOPLE_PROFILE_INCLUDE_PATH)
             ?: error("用户资料为空")
 
@@ -491,19 +488,6 @@ class PersonViewModel(
         this.person.id = loadedPerson.id
         if (urlToken != null) {
             this.person.urlToken = urlToken
-        }
-
-        this.githubSocial = try {
-            val detailUrl =
-                "https://api.zhihu.com/people/${person.urlToken.takeIf(String::isNotBlank) ?: person.id}/profile/detail"
-            environment
-                .fetchJson(detailUrl, "")
-                ?.let { ZhihuJson.decodeJson<DataHolder.People>(it).githubSocialUiState() }
-        } catch (error: CancellationException) {
-            throw error
-        } catch (error: Exception) {
-            Log.e("PersonViewModel", "Failed to load optional social media profile detail", error)
-            null
         }
     }
 }
@@ -605,7 +589,6 @@ const val PEOPLE_SCREEN_BLOCK_BUTTON_TAG = "people_screen_block_button"
 const val PEOPLE_SCREEN_RECOMMENDATION_BLOCK_BUTTON_TAG = "people_screen_recommendation_block_button"
 const val PEOPLE_SCREEN_QUESTION_AUTHOR_BLOCK_BUTTON_TAG = "people_screen_question_author_block_button"
 const val PEOPLE_SCREEN_SEARCH_BUTTON_TAG = "people_screen_search_button"
-const val PEOPLE_SCREEN_GITHUB_STARS_TAG = "people_screen_github_stars"
 const val PEOPLE_SCREEN_ANSWER_SORT_HOT_TAG = "people_screen_answer_sort_voteups"
 const val PEOPLE_SCREEN_ANSWER_SORT_TIME_TAG = "people_screen_answer_sort_created"
 const val PEOPLE_SCREEN_ARTICLE_SORT_HOT_TAG = "people_screen_article_sort_voteups"
@@ -615,44 +598,6 @@ const val PEOPLE_SCREEN_OFFICIAL_BADGE_TAG = "people_screen_official_badge"
 private fun peopleScreenInitialPage(person: Person): Int {
     val jumpToIndex = PEOPLE_SCREEN_TITLES.indexOf(person.jumpTo)
     return if (jumpToIndex >= 0) jumpToIndex else 0
-}
-
-data class GithubSocialUiState(
-    val title: String,
-    val starCount: String,
-    val profileUrl: String,
-    val iconUrl: String? = null,
-)
-
-internal fun DataHolder.People.githubSocialUiState(): GithubSocialUiState? = socialMedias.firstNotNullOfOrNull { media ->
-    if (!media.title.startsWith("GitHub", ignoreCase = true)) {
-        return@firstNotNullOfOrNull null
-    }
-    val starCount = media.modules
-        .firstOrNull { it.title.equals("stars", ignoreCase = true) }
-        ?.value
-        ?.takeIf { it.isNotBlank() }
-        ?: return@firstNotNullOfOrNull null
-    val profileLink = media.link.takeIf { it.isNotBlank() }
-        ?: return@firstNotNullOfOrNull null
-    val profileUrl = if (profileLink.startsWith("zhihu://", ignoreCase = true)) {
-        // link 是知乎内部 AppView，GitHub 用户名来自同一条社交资料的标题。
-        val username = media.title
-            .substringAfter('·', missingDelimiterValue = "")
-            .trim()
-            .takeIf { it.isNotBlank() }
-            ?: return@firstNotNullOfOrNull null
-        "https://github.com/$username"
-    } else {
-        profileLink
-    }
-
-    GithubSocialUiState(
-        title = media.title,
-        starCount = starCount,
-        profileUrl = profileUrl,
-        iconUrl = media.icon.takeIf { it.isNotBlank() },
-    )
 }
 
 /**
@@ -1719,38 +1664,6 @@ private fun UserInfoHeader(
                         badges = viewModel.officialBadgeDetails,
                         modifier = Modifier.padding(top = 6.dp),
                     )
-                    viewModel.githubSocial?.let { githubSocial ->
-                        Row(
-                            modifier = Modifier
-                                .padding(top = 4.dp)
-                                .testTag(PEOPLE_SCREEN_GITHUB_STARS_TAG)
-                                .clickable { openExternalUrl(githubSocial.profileUrl) },
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        ) {
-                            githubSocial.iconUrl?.let { iconUrl ->
-                                AsyncImage(
-                                    model = iconUrl,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(16.dp),
-                                )
-                            }
-                            Text(
-                                text = githubSocial.title,
-                                modifier = Modifier.weight(1f, fill = false),
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            Text(
-                                text = "· ${githubSocial.starCount} stars",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                            )
-                        }
-                    }
                 }
             }
         }

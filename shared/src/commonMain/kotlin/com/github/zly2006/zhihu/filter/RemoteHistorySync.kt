@@ -46,7 +46,7 @@ import kotlinx.serialization.json.JsonArray
 import kotlin.time.Clock
 
 internal const val REMOTE_HISTORY_FIRST_URL =
-    "https://api.zhihu.com/unify-consumption/read_history?offset=0&limit=50"
+    "https://www.zhihu.com/api/v4/unify-consumption/read_history?offset=0&limit=50"
 internal const val REMOTE_HISTORY_WATERMARK_KEY = "remoteHistoryReadTime"
 private const val LAST_ATTEMPT_KEY = "lastRemoteHistorySync"
 
@@ -172,8 +172,8 @@ class RemoteHistorySync(
             val next = Url(paging.next)
             require(
                 next.protocol == URLProtocol.HTTPS &&
-                    next.host == "api.zhihu.com" &&
-                    next.encodedPath == "/unify-consumption/read_history" &&
+                    next.host == "www.zhihu.com" &&
+                    next.encodedPath == "/api/v4/unify-consumption/read_history" &&
                     paging.next !in requested,
             ) { "远端历史分页地址无效" }
             url = paging.next

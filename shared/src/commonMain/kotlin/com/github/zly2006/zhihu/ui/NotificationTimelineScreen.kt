@@ -29,7 +29,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -67,9 +66,6 @@ import com.github.zly2006.zhihu.notification.rememberNotificationSettingsStore
 import com.github.zly2006.zhihu.platform.rememberUserMessageSink
 import com.github.zly2006.zhihu.ui.components.PaginatedList
 import com.github.zly2006.zhihu.ui.components.ProgressIndicatorFooter
-import com.github.zly2006.zhihu.ui.components.pageTurnViewportWithGuide
-import com.github.zly2006.zhihu.ui.components.rememberPageTurnTarget
-import com.github.zly2006.zhihu.viewmodel.MobileNotificationCategory
 import com.github.zly2006.zhihu.viewmodel.NotificationTimelineViewModel
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.number
@@ -78,27 +74,17 @@ import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
 import kotlin.time.Instant
 
+/** 邀请回答列表 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NotificationTimelineScreen(
-    entryName: String,
-    title: String,
-) {
+fun NotificationTimelineScreen() {
     val navigator = LocalNavigator.current
     val settingsStore = rememberNotificationSettingsStore()
     val environment = rememberNotificationEnvironment(settingsStore)
     val userMessages = rememberUserMessageSink()
-    val viewModel = viewModel(key = "notification_timeline_$entryName") {
-        NotificationTimelineViewModel(entryName)
-    }
-    val invitations = entryName == INVITATION_ENTRY_NAME
-    val listState = rememberLazyListState()
-    val pageTurnTarget = rememberPageTurnTarget(
-        listState = listState,
-        enabled = MobileNotificationCategory.entries.any { it.entryName == entryName },
-    )
+    val viewModel = viewModel(key = "notification_invitations") { NotificationTimelineViewModel() }
 
-    LaunchedEffect(entryName) {
+    LaunchedEffect(Unit) {
         if (viewModel.allData.isEmpty()) {
             viewModel.refresh(environment)
         }
@@ -108,7 +94,7 @@ fun NotificationTimelineScreen(
         modifier = Modifier.fillMaxSize(),
         topBar = {
             CenterAlignedTopAppBar(
-                title = { Text(title) },
+                title = { Text("邀请回答") },
                 navigationIcon = {
                     IconButton(onClick = navigator.onNavigateBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
@@ -129,10 +115,7 @@ fun NotificationTimelineScreen(
                 items = viewModel.allData,
                 onLoadMore = { viewModel.loadMore(environment) },
                 isEnd = { viewModel.isEnd },
-                listState = listState,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .pageTurnViewportWithGuide(pageTurnTarget),
+                modifier = Modifier.fillMaxSize(),
                 footer = ProgressIndicatorFooter,
                 key = { it.stableId },
             ) { notification ->
@@ -146,7 +129,7 @@ fun NotificationTimelineScreen(
                         )
                     }
 
-                    invitations -> InvitationAnswerItem(
+                    else -> InvitationAnswerItem(
                         notification = notification,
                         onQuestionClick = {
                             notification.target?.id?.toLongOrNull()?.let { questionId ->
@@ -182,16 +165,6 @@ fun NotificationTimelineScreen(
                             }
                         },
                     )
-
-                    viewModel.shouldShowNotification(settingsStore, notification) -> {
-                        NotificationItemView(
-                            notification = notification,
-                            onClick = {
-                                notification.navDestination()?.let(navigator.onNavigate)
-                                    ?: userMessages.showMessage("暂不支持打开此通知")
-                            },
-                        )
-                    }
                 }
             }
         }
@@ -346,5 +319,3 @@ private fun MobileNotificationTimelineItem.invitationTime(): String {
         else -> "${date.month.number.toString().padStart(2, '0')}-${date.day.toString().padStart(2, '0')}"
     }
 }
-
-private const val INVITATION_ENTRY_NAME = "invite"

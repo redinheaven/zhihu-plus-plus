@@ -34,10 +34,10 @@ class ZhihuOnlineHistoryClientTest {
     @Test
     fun fetchOnlineHistoryPageDecodesSnakeCasePayload() = runTest {
         val client = onlineHistoryMockClient { url ->
-            assertEquals("https://api.zhihu.com/unify-consumption/read_history?offset=0&limit=10", url)
+            assertEquals("https://www.zhihu.com/api/v4/unify-consumption/read_history?offset=0&limit=10", url)
         }
 
-        val response = client.get("https://api.zhihu.com/unify-consumption/read_history?offset=0&limit=10").jsonObject()
+        val response = client.get("https://www.zhihu.com/api/v4/unify-consumption/read_history?offset=0&limit=10").jsonObject()
         val items = response["data"]!!.jsonArray.map { ZhihuJson.decodeJson<OnlineHistoryItem>(it) }
 
         assertEquals("read_history", items.single().cardType)

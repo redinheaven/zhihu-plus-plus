@@ -54,7 +54,7 @@ class LocalContentInitializer(
         repeat(3) { index ->
             tasks.add(
                 CrawlingTask(
-                    url = zhihuFollowingRecommendUrl(offset = index * 10),
+                    url = zhihuFollowingRecommendUrl(page = index),
                     reason = CrawlingReason.Following,
                     priority = 8,
                 ),
@@ -138,7 +138,7 @@ class LocalContentInitializer(
                 val additionalTasks = when (reason) {
                     CrawlingReason.Following -> (0 until (minTasksPerReason - pendingCount)).map { index ->
                         CrawlingTask(
-                            url = zhihuFollowingRecommendUrl(offset = index * 10),
+                            url = zhihuFollowingRecommendUrl(page = index),
                             reason = CrawlingReason.Following,
                             priority = 8,
                         )

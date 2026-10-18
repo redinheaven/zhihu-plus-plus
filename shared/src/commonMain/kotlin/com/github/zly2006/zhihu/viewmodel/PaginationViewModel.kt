@@ -115,14 +115,12 @@ abstract class PaginationViewModel<T : Any>(
 
     protected open fun resolvePageUrl(): String = lastPaging?.next ?: initialUrl
 
-    /** 联着网但域名解析失败时，子类可以改用另一个主机：返回 true 表示已切换，立即重试，不计入静默重试次数 */
-    protected open fun switchHostAfterResolutionFailure(): Boolean = false
-
     /**
-     * Generally used fields to include in the API request.
-     * This can be overridden in subclasses to include more specific fields.
+     * 请求附带的 include（会覆盖 URL 里已有的 include）。默认不带，和网页端一致：上游曾给所有列表默认加
+     * `data[*].content,excerpt,headline,target.author.badge_v2`，连评论、关注动态都带，一看就不是浏览器发的。
+     * 只有确实要靠 include 才返回全文的列表（如问题下的回答）才覆盖。
      */
-    open val include = "data[*].content,excerpt,headline,target.author.badge_v2"
+    open val include = ""
 
     open fun refresh(environment: PaginationEnvironment) {
         currentJob?.cancel()
@@ -230,16 +228,6 @@ abstract class PaginationViewModel<T : Any>(
 
     protected fun errorHandle(e: Exception, environment: PaginationEnvironment) {
         if (e !is CancellationException) {
-            if (e.isHostResolutionFailure() && networkAvailable.value && switchHostAfterResolutionFailure()) {
-                isLoading = false
-                // 稍等再发：当前请求的 finally 还要把 isLoading 置回 false
-                hostResolutionRetryJob = viewModelScope.launch {
-                    delay(300)
-                    hostResolutionRetryJob = null
-                    loadMore(environment)
-                }
-                return
-            }
             if (e.isHostResolutionFailure() && networkAvailable.value && hostResolutionRetries < 2) {
                 // 系统显示联着网时域名解析偶发失败（刚从后台回来、Wi-Fi 切换、DNS 抖动），等 1s、2s 静默重试，不提示
                 hostResolutionRetries++
@@ -417,7 +405,7 @@ suspend fun ZhihuApiEnvironment.addReadHistory(
 }
 
 internal suspend fun ZhihuApiEnvironment.deleteOnlineHistoryItem(item: OnlineHistoryDeletePair) {
-    val response = postSigned("https://api.zhihu.com/read_history/batch_del") {
+    val response = postSigned("https://www.zhihu.com/api/v4/read_history/batch_del") {
         contentType(ContentType.Application.Json)
         setBody(
             buildJsonObject {
@@ -456,14 +444,6 @@ suspend fun ZhihuApiEnvironment.deleteSigned(
     client.delete(url) {
         block()
         signZhihuFetchRequest(cookies)
-    }
-}
-
-interface MobileHomeFeedEnvironment : ZhihuApiEnvironment {
-    fun mobileHomeFeedHttpClient(): HttpClient = httpClient()
-
-    suspend fun handleMobileHomeFeedFailure(error: Exception) {
-        handleFetchFailure("AndroidHomeFeedViewModel", error)
     }
 }
 
@@ -601,7 +581,6 @@ interface ArticleLoadEnvironment :
 
 interface PaginationEnvironment :
     ZhihuApiEnvironment,
-    MobileHomeFeedEnvironment,
     FeedDisplayEnvironment,
     ContentInteractionEnvironment,
     LocalRecommendationEnvironment,

@@ -208,7 +208,7 @@ class LocalRecommendationSupportTest {
         assertEquals(setOf(0, 7), trendingTasks.map { it.priority }.toSet())
         val followingTasks = dao.getTasksByStatus(CrawlingStatus.NotStarted).filter { it.reason == CrawlingReason.Following }
         assertEquals(3, followingTasks.size)
-        assertEquals(setOf("https://api.zhihu.com/moments_v3?feed_type=recommend"), followingTasks.map { it.url }.toSet())
+        assertEquals(setOf("https://www.zhihu.com/api/v4/web_moments?feed_type=recommend&page_num=0"), followingTasks.map { it.url }.toSet())
         assertEquals(setOf(8), followingTasks.map { it.priority }.toSet())
         database.close()
     }
@@ -373,7 +373,7 @@ class LocalRecommendationSupportTest {
         dao.insertTasks(
             listOf(
                 CrawlingTask(
-                    url = "https://api.zhihu.com/moments_v3?feed_type=recommend",
+                    url = "https://www.zhihu.com/api/v4/web_moments?feed_type=recommend&page_num=0",
                     reason = CrawlingReason.Following,
                 ),
             ),
@@ -393,12 +393,12 @@ class LocalRecommendationSupportTest {
         executor.executeTask(
             CrawlingTask(
                 id = taskId,
-                url = "https://api.zhihu.com/moments_v3?feed_type=recommend",
+                url = "https://www.zhihu.com/api/v4/web_moments?feed_type=recommend&page_num=0",
                 reason = CrawlingReason.Following,
             ),
         )
 
-        assertEquals(listOf("https://api.zhihu.com/moments_v3?feed_type=recommend"), requestedUrls)
+        assertEquals(listOf("https://www.zhihu.com/api/v4/web_moments?feed_type=recommend&page_num=0"), requestedUrls)
         assertEquals(emptyList(), dao.getTasksByStatus(CrawlingStatus.InProgress))
         assertEquals(1, dao.getTasksByStatus(CrawlingStatus.Completed).size)
         assertEquals(emptyList(), dao.getRecentResults(10))

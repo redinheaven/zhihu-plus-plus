@@ -107,10 +107,11 @@ import coil3.compose.AsyncImage
 import com.github.zly2006.zhihu.data.DataHolder
 import com.github.zly2006.zhihu.data.Feed
 import com.github.zly2006.zhihu.data.FeedDisplayItem
-import com.github.zly2006.zhihu.data.MOBILE_NOTIFICATION_MESSAGE_URL
-import com.github.zly2006.zhihu.data.MobileNotificationMessageOverview
 import com.github.zly2006.zhihu.data.RecommendationMode
+import com.github.zly2006.zhihu.data.ZHIHU_ME_NOTIFICATIONS_INCLUDE
+import com.github.zly2006.zhihu.data.ZHIHU_ME_URL
 import com.github.zly2006.zhihu.data.ZhihuJson
+import com.github.zly2006.zhihu.data.ZhihuMeNotifications
 import com.github.zly2006.zhihu.data.cachedContentDetail
 import com.github.zly2006.zhihu.data.navDestination
 import com.github.zly2006.zhihu.data.networkReconnected
@@ -147,7 +148,6 @@ import com.github.zly2006.zhihu.ui.components.rememberPageTurnTarget
 import com.github.zly2006.zhihu.ui.subscreens.DEFAULT_FAB_OPACITY
 import com.github.zly2006.zhihu.ui.subscreens.PREF_FAB_OPACITY
 import com.github.zly2006.zhihu.util.Log
-import com.github.zly2006.zhihu.util.json
 import com.github.zly2006.zhihu.viewmodel.HomeFeedFilterResult
 import com.github.zly2006.zhihu.viewmodel.PaginationEnvironment
 import com.github.zly2006.zhihu.viewmodel.QUALITY_FILTER_MODE_PREFERENCE_KEY
@@ -160,14 +160,11 @@ import com.github.zly2006.zhihu.viewmodel.feed.replaceHomeFeedItemsWithFilteredR
 import com.github.zly2006.zhihu.viewmodel.fetchContentDetail
 import com.github.zly2006.zhihu.viewmodel.getOrFetchContentDetail
 import com.github.zly2006.zhihu.viewmodel.local.LocalHomeFeedViewModel
-import com.github.zly2006.zhihu.viewmodel.postSigned
 import com.github.zly2006.zhihu.viewmodel.rememberPaginationEnvironment
-import com.github.zly2006.zhihu.viewmodel.za.AndroidHomeFeedViewModel
-import com.github.zly2006.zhihu.viewmodel.za.MixedHomeFeedViewModel
 import io.ktor.client.request.forms.MultiPartFormDataContent
 import io.ktor.client.request.forms.formData
-import io.ktor.client.request.get
 import io.ktor.client.request.header
+import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.isSuccess
@@ -228,8 +225,6 @@ private class HomeScreenState(
 
     private fun newDeferredFeed(mode: RecommendationMode): BaseFeedViewModel? = when (mode) {
         RecommendationMode.WEB -> HomeFeedViewModel()
-        RecommendationMode.ANDROID -> AndroidHomeFeedViewModel()
-        RecommendationMode.MIXED -> MixedHomeFeedViewModel()
         RecommendationMode.LOCAL -> null
     }
 
@@ -241,7 +236,6 @@ private class HomeScreenState(
         val feed = newDeferredFeed(mode) ?: return
         prefetchedFeed = mode to feed
         feed.refresh(environment)
-        if (mode != RecommendationMode.WEB) feed.ensureLazyDetailFilter(environment)
     }
 
     /** 进程被杀后切回时，把存在文件里的预取批次放回内存，留给下次手动刷新 */
@@ -272,7 +266,7 @@ private class HomeScreenState(
     private var touchJob: Job? = null
 
     /**
-     * 卡片真正滚进屏幕才算看过：本地记为已展示（以后不再推），网页 / 混合推荐还向知乎上报 touch（攒 3 秒一起报）。
+     * 卡片真正滚进屏幕才算看过：本地记为已展示（以后不再推），还向知乎上报 touch（攒 3 秒一起报）。
      * 加载了但没划到就被刷新掉的卡片什么都不记，以后还能被推回来。
      */
     fun markSeen(items: List<FeedDisplayItem>, mode: RecommendationMode, environment: PaginationEnvironment) {
@@ -280,7 +274,6 @@ private class HomeScreenState(
         val newItems = items.filter { seenKeys.add(it.stableKey) }
         if (newItems.isEmpty()) return
         viewModelScope.launch(Dispatchers.Default) { runCatching { environment.recordHomeFeedViews(newItems) } }
-        if (mode == RecommendationMode.ANDROID) return
         newItems.filterNot { it.isFiltered }.mapNotNullTo(pendingTouch) { item ->
             when (val target = item.feed?.target) {
                 is Feed.AnswerTarget -> "answer" to target.id.toString()
@@ -295,7 +288,8 @@ private class HomeScreenState(
             if (pendingTouch.isEmpty() || environment.authenticatedCookies()["d_c0"] == null) return@launch
             val batch = pendingTouch.toList()
             try {
-                val response = environment.postSigned("https://www.zhihu.com/lastread/touch") {
+                // 网页端首页上报 touch 不带 zse 签名，和浏览器保持一致
+                val response = environment.httpClient().post("https://www.zhihu.com/lastread/touch") {
                     header("x-requested-with", "fetch")
                     setBody(
                         MultiPartFormDataContent(
@@ -322,7 +316,7 @@ private class HomeScreenState(
      * [protectVisible] 为 false 时命中的可见卡片也立刻移除（用户刚加了屏蔽规则，期待马上生效）。
      */
     fun refilter(feed: BaseFeedViewModel, environment: PaginationEnvironment, protectVisible: Boolean) {
-        // 只重过滤已经过滤过的（网页推荐卡片、拉过详情的安卓推荐卡片）；还没拉详情的安卓推荐卡片滑到时会按当时的规则过滤，这里不提前去拉
+        // 只重过滤已经过滤过的卡片
         val items = feed.displayItems.filter { it.feed != null || it.raw != null }
         viewModelScope.launch(Dispatchers.Default) {
             val filtered = runCatching { environment.applyBackgroundHomeFeedFilter(items) }.getOrElse { return@launch }
@@ -377,8 +371,8 @@ fun HomeScreen(
     // 获取当前推荐算法设置
     val currentRecommendationMode =
         RecommendationMode.entries.find {
-            it.key == settings.getString("recommendationMode", RecommendationMode.MIXED.key)
-        } ?: RecommendationMode.MIXED
+            it.key == settings.getString("recommendationMode", RecommendationMode.WEB.key)
+        } ?: RecommendationMode.WEB
     val startupCacheFile = remember(appPrivateDirectory, currentRecommendationMode) {
         Path(appPrivateDirectory, homeFeedStartupCacheFileName(currentRecommendationMode))
     }
@@ -399,9 +393,7 @@ fun HomeScreen(
     val isDebuggable = rememberHomeIsDebuggable()
     val initialViewModel: BaseFeedViewModel = when (currentRecommendationMode) {
         RecommendationMode.WEB -> viewModel { HomeFeedViewModel() }
-        RecommendationMode.ANDROID -> viewModel { AndroidHomeFeedViewModel() }
         RecommendationMode.LOCAL -> viewModel { LocalHomeFeedViewModel() }
-        RecommendationMode.MIXED -> viewModel { MixedHomeFeedViewModel() }
     }
     val viewModel = homeState.swappedFeed?.takeIf { it.first == currentRecommendationMode }?.second ?: initialViewModel
     val latestViewModel by rememberUpdatedState(viewModel)
@@ -459,10 +451,9 @@ fun HomeScreen(
     LaunchedEffect(Unit) {
         try {
             unreadCount = paginationEnvironment
-                .mobileHomeFeedHttpClient()
-                .get("$MOBILE_NOTIFICATION_MESSAGE_URL?limit=20")
-                .json<MobileNotificationMessageOverview>()
-                .totalUnreadCount
+                .fetchJson(ZHIHU_ME_URL, ZHIHU_ME_NOTIFICATIONS_INCLUDE)
+                ?.let { ZhihuJson.decodeJson<ZhihuMeNotifications>(it) }
+                ?.let { it.totalCount + it.messagesCount } ?: 0
         } catch (_: Exception) {
             // 忽略错误
         }
@@ -605,18 +596,10 @@ fun HomeScreen(
     }
 
     // 记录可见卡片，滚进屏幕的记为看过；后台过滤命中时还在屏幕上的卡片，等滑出屏幕再移除
-    // 安卓推荐、混合推荐：按滑动位置逐步拉详情过滤（见 BaseFeedViewModel.ensureLazyDetailFilter），含冷启动恢复的列表
-    LaunchedEffect(viewModel, currentRecommendationMode) {
-        if (currentRecommendationMode == RecommendationMode.ANDROID || currentRecommendationMode == RecommendationMode.MIXED) {
-            viewModel.ensureLazyDetailFilter(paginationEnvironment)
-        }
-    }
-
     LaunchedEffect(viewModel, currentRecommendationMode) {
         snapshotFlow { listState.layoutInfo.visibleItemsInfo.mapTo(hashSetOf()) { it.key } }.collect { keys ->
             val sync = viewModel.listSync
             sync.visibleItemKeys = keys
-            sync.maxVisibleIndex = viewModel.displayItems.indexOfLast { it.stableKey in keys }
             homeState.markSeen(viewModel.displayItems.filter { it.stableKey in keys }, currentRecommendationMode, paginationEnvironment)
             val leaving = sync.pendingRemovalKeys.filterTo(hashSetOf()) { it !in keys }
             if (leaving.isNotEmpty()) {
@@ -878,7 +861,7 @@ fun HomeScreen(
                     key = { item -> item.stableKey },
                 ) { item ->
                     // 本 fork：卡片往左滑屏蔽所在问题（同卡片菜单「屏蔽问题」）。所有卡片都接住左右滑，不切换标签页；
-                    // 安卓推荐卡片在后台详情回来前（或从预读、恢复的列表来）不知道所属问题，滑时现查一次详情
+                    // 从恢复的列表来、还不知道所属问题的卡片，滑时现查一次详情
                     SwipeToReplyContainer(
                         onReply = {
                             refreshScope.launch {

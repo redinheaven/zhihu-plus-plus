@@ -719,10 +719,10 @@ fun ZhihuMain(
                             }
                             composable<Notification.Entry> { navEntry ->
                                 val entry: Notification.Entry = navEntry.toRoute()
-                                NotificationTimelineScreen(entry.entryName, entry.title)
+                                NotificationCategoryScreen(entry)
                             }
                             composable<Notification.Invitations> {
-                                NotificationTimelineScreen("invite", "邀请回答")
+                                NotificationTimelineScreen()
                             }
                             composable<Notification.Message> { navEntry ->
                                 PrivateMessageScreen(navEntry.toRoute())

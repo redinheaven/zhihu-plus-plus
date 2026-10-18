@@ -44,6 +44,15 @@ open class QuestionFeedViewModel(
     override val initialUrl: String
         get() = zhihuQuestionFeedsUrl(questionId, limit = 20, order = sortOrder)
 
+    // 问题页回答列表不带 include 不返回全文；用浏览器里 www.zhihu.com 问题页同一接口的 include
+    override val include =
+        "data[*].is_normal,admin_closed_comment,reward_info,is_collapsed,annotation_action,annotation_detail,collapse_reason," +
+            "is_sticky,collapsed_by,suggest_edit,comment_count,can_comment,content,editable_content,attachment,voteup_count," +
+            "reshipment_settings,comment_permission,created_time,updated_time,review_info,relevant_info,question,excerpt," +
+            "is_labeled,paid_info,paid_info_content,reaction,reaction_instruction,segment_infos,allow_segment_interaction," +
+            "hot_comment,relationship.is_authorized,is_author,voting,is_thanked,is_nothelp;" +
+            "data[*].author.follower_count,vip_info,kvip_info,badge[*].topics;"
+
     fun updateSortOrder(order: String) {
         if (sortOrder != order) {
             sortOrder = order

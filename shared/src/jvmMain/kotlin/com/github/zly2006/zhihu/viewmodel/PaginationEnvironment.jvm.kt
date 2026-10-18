@@ -289,7 +289,7 @@ class DesktopPaginationEnvironment(
     override suspend fun clearAllHistory() {
         historyStorage.clearAndSave()
         if (store.session.cookies["d_c0"] == null) return
-        postSigned("https://api.zhihu.com/read_history/batch_del") {
+        postSigned("https://www.zhihu.com/api/v4/read_history/batch_del") {
             contentType(KtorContentType.Application.Json)
             setBody(
                 buildJsonObject {

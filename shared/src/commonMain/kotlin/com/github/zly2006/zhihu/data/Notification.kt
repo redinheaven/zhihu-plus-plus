@@ -54,56 +54,6 @@ data class NotificationItem(
 )
 
 @Serializable
-data class MobileNotificationMessageOverview(
-    val head: List<MobileNotificationHeadEntry> = emptyList(),
-    val columnHead: List<MobileNotificationColumnHead> = emptyList(),
-    val data: List<MobileNotificationTimelineItem> = emptyList(),
-    val paging: ZhihuPaging? = null,
-    val unread: MobileNotificationUnread = MobileNotificationUnread(),
-) {
-    val totalUnreadCount: Int
-        get() = unread.message.count
-}
-
-const val MOBILE_NOTIFICATION_MESSAGE_URL = "https://api.zhihu.com/notifications/v3/message/v3"
-
-@Serializable
-data class MobileNotificationUnread(
-    val message: MobileNotificationUnreadCount = MobileNotificationUnreadCount(),
-)
-
-@Serializable
-data class MobileNotificationUnreadCount(
-    val count: Int = 0,
-    val showCount: Boolean = false,
-)
-
-@Serializable
-data class MobileNotificationHeadEntry(
-    val detailTitle: String = "",
-    val unreadCount: Int = 0,
-)
-
-@Serializable
-data class MobileNotificationColumnHead(
-    val id: String = "",
-    val title: String = "",
-    val textPrefix: String = "",
-    val text: String = "",
-    val targetLink: String = "",
-    val avatarUrls: List<MobileNotificationImage> = emptyList(),
-    val images: List<String> = emptyList(),
-    val unreadCount: Int = 0,
-    val created: Long = 0,
-)
-
-@Serializable
-data class MobileNotificationImage(
-    val url: String = "",
-    val nightUrl: String = "",
-)
-
-@Serializable
 data class MobileNotificationTimelineItem(
     val id: String = "",
     val uniqueId: String = "",
@@ -209,33 +159,44 @@ data class MobileNotificationAdditionalInfo(
     val icon: String = "",
 )
 
+/** 网页端私信会话列表（www.zhihu.com/api/v4/inbox）的一项 */
 @Serializable
-data class ZhihuPrivateMessagePage(
-    val data: List<ZhihuPrivateMessage> = emptyList(),
-    val paging: ZhihuPaging,
+data class ZhihuInboxThread(
+    val id: String = "",
+    val snippet: String = "",
+    val participant: MobileNotificationAuthor = MobileNotificationAuthor(),
+    val updatedTime: Long = 0,
+    val unreadCount: Int = 0,
+)
+
+/** 网页端私信会话（www.zhihu.com/api/v4/chat?sender_id=），消息按时间从新到旧 */
+@Serializable
+data class ZhihuChatPage(
+    val data: ZhihuChatData = ZhihuChatData(),
+    val paging: ZhihuPaging? = null,
+)
+
+@Serializable
+data class ZhihuChatData(
+    val messages: List<ZhihuPrivateMessage> = emptyList(),
+    val sender: MobileNotificationAuthor? = null,
+    val receiver: MobileNotificationAuthor? = null,
 )
 
 @Serializable
 data class ZhihuPrivateMessage(
     val id: String = "",
-    val type: String = "",
+    val text: String = "",
     val contentType: Int = 0,
-    val content: String = "",
     val createdTime: Long = 0,
-    val sender: MobileNotificationAuthor? = null,
-    val receiver: MobileNotificationAuthor? = null,
-    val plugin: ZhihuPrivateMessagePlugin? = null,
+    /** 对方发的是 sender，自己发的是 receiver（网页端私信页按这个字段分左右） */
+    val userType: String = "",
 ) {
     val stableId: String
-        get() = id.ifBlank { "$createdTime-${sender?.id}-${receiver?.id}" }
+        get() = id.ifBlank { "$createdTime-$userType" }
+    val incoming: Boolean
+        get() = userType == "sender"
 }
-
-@Serializable
-data class ZhihuPrivateMessagePlugin(
-    val pluginType: String = "",
-    val pluginContent: String = "",
-    val excerpt: String = "",
-)
 
 object NotificationActorsSerializer : KSerializer<List<NotificationActor>> {
     override val descriptor: SerialDescriptor
@@ -375,11 +336,16 @@ sealed interface NotificationTarget {
     }
 }
 
+/** 网页端顶栏取未读数的 include（见浏览器里 www.zhihu.com 的 /api/v4/me 请求） */
+const val ZHIHU_ME_NOTIFICATIONS_INCLUDE =
+    "default_notifications_count,follow_notifications_count,vote_thank_notifications_count,messages_count"
+
 @Serializable
 data class ZhihuMeNotifications(
     val defaultNotificationsCount: Int = 0,
     val followNotificationsCount: Int = 0,
     val voteThankNotificationsCount: Int = 0,
+    val messagesCount: Int = 0,
 ) {
     val totalCount: Int get() = defaultNotificationsCount + followNotificationsCount + voteThankNotificationsCount
 }

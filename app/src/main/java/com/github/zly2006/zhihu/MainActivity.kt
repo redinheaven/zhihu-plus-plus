@@ -26,6 +26,7 @@ import android.net.ConnectivityManager
 import android.net.Network
 import android.net.NetworkCapabilities
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.view.KeyEvent
@@ -49,9 +50,13 @@ import coil3.SingletonImageLoader
 import coil3.disk.DiskCache
 import coil3.disk.directory
 import coil3.memory.MemoryCache
+import coil3.network.ktor3.KtorNetworkFetcherFactory
 import coil3.request.CachePolicy
 import coil3.request.ImageRequest
 import coil3.request.crossfade
+import com.github.zly2006.zhihu.account.DESKTOP_SEC_CH_UA
+import com.github.zly2006.zhihu.account.DESKTOP_SEC_CH_UA_MOBILE
+import com.github.zly2006.zhihu.account.DESKTOP_SEC_CH_UA_PLATFORM
 import com.github.zly2006.zhihu.data.AccountData
 import com.github.zly2006.zhihu.data.HistoryStorage
 import com.github.zly2006.zhihu.data.networkAvailable
@@ -96,6 +101,11 @@ import com.github.zly2006.zhihu.util.enableEdgeToEdgeCompat
 import com.github.zly2006.zhihu.viewmodel.filter.androidKeywordSemanticMatcher
 import com.github.zly2006.zhihu.viewmodel.filter.androidKeywordWeightExtractor
 import com.github.zly2006.zhihu.viewmodel.filter.getContentFilterDatabase
+import io.ktor.client.HttpClient
+import io.ktor.client.plugins.DefaultRequest
+import io.ktor.client.plugins.UserAgent
+import io.ktor.client.request.header
+import io.ktor.http.HttpHeaders
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -219,14 +229,6 @@ class MainActivity : ComponentActivity() {
                         Toast.makeText(this@MainActivity, "数据自动同步失败：${it.message ?: it.javaClass.simpleName}", Toast.LENGTH_LONG).show()
                     }
                 }
-                // 设备身份引导：网页 / Cookie 登录的账号缺 udid，补齐后安卓接口才带 x-udid
-                runCatching {
-                    com.github.zly2006.zhihu.account
-                        .androidZhihuAccountStore(this@MainActivity)
-                        .ensureMobileUdid()
-                }.onFailure {
-                    Log.w(TAG, "设备身份引导失败：${it.message}", it)
-                }
             }
             if (intent.data != null) {
                 if (intent.data!!.authority == "zhihu-plus.internal") {
@@ -257,6 +259,28 @@ class MainActivity : ComponentActivity() {
             .crossfade(true)
             .components {
                 // add(SvgDecoder.Factory())
+                // Coil 默认的 Ktor 客户端 UA 是「ktor-client」、不带 Referer，在图片 CDN 日志里一眼就能认出；
+                // 按 Chrome 在 www.zhihu.com 页面里加载 zhimg 图片的请求头来发（zhimg 是另一个站点，浏览器不带知乎 Cookie）
+                add(
+                    KtorNetworkFetcherFactory(httpClient = {
+                        HttpClient {
+                            install(UserAgent) { agent = AccountData.data.userAgent }
+                            install(DefaultRequest) {
+                                // 带上 avif 时 zhimg 会返回 AVIF，Android 12 以下的系统解不了，只在能解的系统上和 Chrome 一样声明
+                                val avif = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) "image/avif," else ""
+                                header(HttpHeaders.Accept, "${avif}image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8")
+                                header(HttpHeaders.AcceptLanguage, "zh-CN,zh;q=0.9")
+                                header(HttpHeaders.Referrer, "https://www.zhihu.com/")
+                                header("sec-ch-ua", DESKTOP_SEC_CH_UA)
+                                header("sec-ch-ua-mobile", DESKTOP_SEC_CH_UA_MOBILE)
+                                header("sec-ch-ua-platform", DESKTOP_SEC_CH_UA_PLATFORM)
+                                header("sec-fetch-dest", "image")
+                                header("sec-fetch-mode", "no-cors")
+                                header("sec-fetch-site", "cross-site")
+                            }
+                        }
+                    }),
+                )
             }.memoryCache {
                 MemoryCache
                     .Builder()

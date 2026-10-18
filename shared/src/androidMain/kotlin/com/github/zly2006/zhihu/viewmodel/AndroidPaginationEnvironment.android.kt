@@ -35,7 +35,6 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
-import com.github.zly2006.zhihu.account.accountHttpClientEngineForTesting
 import com.github.zly2006.zhihu.account.androidZhihuAccountStore
 import com.github.zly2006.zhihu.data.AccountData
 import com.github.zly2006.zhihu.data.DataHolder
@@ -43,9 +42,9 @@ import com.github.zly2006.zhihu.data.Feed
 import com.github.zly2006.zhihu.data.FeedDisplayItem
 import com.github.zly2006.zhihu.data.HistoryStorage
 import com.github.zly2006.zhihu.data.QualityFilterSettings
-import com.github.zly2006.zhihu.data.ZhihuCookieStorage
 import com.github.zly2006.zhihu.data.ZhihuJson.json
 import com.github.zly2006.zhihu.data.asApiEnvironment
+import com.github.zly2006.zhihu.data.installZhihuCommonClientConfig
 import com.github.zly2006.zhihu.data.navDestination
 import com.github.zly2006.zhihu.data.target
 import com.github.zly2006.zhihu.filter.ContentOpenEventSupport
@@ -79,16 +78,9 @@ import com.github.zly2006.zhihu.viewmodel.local.LocalRecommendationEngine
 import com.github.zly2006.zhihu.viewmodel.local.buildLocalRecommendationEngine
 import com.github.zly2006.zhihu.viewmodel.local.getLocalContentDatabase
 import io.ktor.client.HttpClient
-import io.ktor.client.HttpClientConfig
-import io.ktor.client.plugins.UserAgent
-import io.ktor.client.plugins.api.createClientPlugin
-import io.ktor.client.plugins.cache.HttpCache
-import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
-import io.ktor.client.plugins.cookies.HttpCookies
 import io.ktor.client.request.setBody
 import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
-import io.ktor.util.appendAll
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonArray
@@ -104,17 +96,6 @@ import io.ktor.http.ContentType as KtorContentType
 
 interface AndroidContextPaginationEnvironment : PaginationEnvironment {
     val context: Context
-}
-
-private class ZhihuPPAndroidHeadersConfig {
-    lateinit var context: Context
-}
-
-private val ZHIHU_PP_ANDROID_HEADERS = createClientPlugin("ZhihuPPAndroidHeaders", ::ZhihuPPAndroidHeadersConfig) {
-    val context = pluginConfig.context
-    onRequest { request, _ ->
-        request.headers.appendAll(AccountData.androidHeaders(context))
-    }
 }
 
 open class SharedAndroidPaginationEnvironment(
@@ -133,39 +114,10 @@ open class SharedAndroidPaginationEnvironment(
         val loginForRecommendation = settingsStore.getBoolean("loginForRecommendation", true)
         if (allowGuestAccess && !loginForRecommendation) {
             return HttpClient {
-                install(HttpCache)
-                install(ContentNegotiation) {
-                    json(json)
-                }
-                install(UserAgent) {
-                    agent = AccountData.data.userAgent
-                }
+                installZhihuCommonClientConfig(mutableMapOf(), AccountData.data.userAgent, enableHttpCache = true)
             }
         }
         return androidZhihuAccountStore(context).client.httpClient()
-    }
-
-    override fun mobileHomeFeedHttpClient(): HttpClient {
-        val loginForRecommendation = settingsStore.getBoolean("loginForRecommendation", true)
-        val configure: HttpClientConfig<*>.() -> Unit = {
-            install(ContentNegotiation) {
-                json(json)
-            }
-            install(UserAgent) {
-                agent = AccountData.ANDROID_USER_AGENT
-            }
-            install(ZHIHU_PP_ANDROID_HEADERS) {
-                context = this@SharedAndroidPaginationEnvironment.context
-            }
-            if (loginForRecommendation) {
-                install(HttpCookies) {
-                    storage = ZhihuCookieStorage(AccountData.data.cookies) {
-                        AccountData.saveData(context, AccountData.data)
-                    }
-                }
-            }
-        }
-        return accountHttpClientEngineForTesting?.let { HttpClient(it, configure) } ?: HttpClient(configure)
     }
 
     override fun authenticatedCookies(): Map<String, String> {
@@ -190,11 +142,6 @@ open class SharedAndroidPaginationEnvironment(
         }
         Log.e(tag, "Failed to fetch feeds", error)
         userMessageSink.showShortMessage("加载失败: ${error.message}")
-    }
-
-    override suspend fun handleMobileHomeFeedFailure(error: Exception) {
-        Log.e("AndroidHomeFeedViewModel", "Failed to fetch feeds", error)
-        userMessageSink.showShortMessage("安卓端推荐加载失败: ${error.message}")
     }
 
     override fun feedDisplaySettings(): FeedDisplaySettings = FeedDisplaySettings(
@@ -366,7 +313,7 @@ open class SharedAndroidPaginationEnvironment(
 
     override suspend fun clearAllHistory() {
         HistoryStorage(context).clearAndSave()
-        postSigned("https://api.zhihu.com/read_history/batch_del") {
+        postSigned("https://www.zhihu.com/api/v4/read_history/batch_del") {
             contentType(KtorContentType.Application.Json)
             setBody(
                 buildJsonObject {

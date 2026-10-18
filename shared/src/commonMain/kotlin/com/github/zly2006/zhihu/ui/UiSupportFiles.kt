@@ -371,8 +371,10 @@ fun noopSettingsStore(): SettingsStore = object : SettingsStore {
     override fun remove(key: String) = Unit
 }
 
+// www 的 members 接口：include 里写 badge_v2 反而不返回它，要写网页端用的 badge[?(type=best_answerer)].topics 才带
 internal const val PEOPLE_PROFILE_INCLUDE_PATH =
-    "allow_message,is_followed,is_following,is_org,is_blocking,badge_v2,answer_count,follower_count,following_count,articles_count,question_count,pins_count"
+    "allow_message,is_followed,is_following,is_org,is_blocking,answer_count,follower_count,following_count," +
+        "articles_count,question_count,pins_count,badge[?(type=best_answerer)].topics"
 
 @Composable
 expect fun rememberHomeIsDebuggable(): Boolean

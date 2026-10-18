@@ -28,7 +28,6 @@ import com.github.zly2006.zhihu.account.androidZhihuAccountStore
 import com.github.zly2006.zhihu.account.currentAndroidApplicationContext
 import com.github.zly2006.zhihu.account.currentAndroidZhihuAccountStore
 import com.github.zly2006.zhihu.account.zhihuAndroidDeviceInfo
-import com.github.zly2006.zhihu.account.zhihuNetworkTypeName
 import com.github.zly2006.zhihu.data.Person
 import com.github.zly2006.zhihu.data.ZhihuJson
 import kotlinx.serialization.KSerializer
@@ -41,23 +40,6 @@ import kotlinx.serialization.json.encodeToJsonElement
 @SuppressLint("StaticFieldLeak")
 object AccountData {
     val json = ZhihuJson.json
-
-    /**
-     * 安卓接口（feed / 通知等）的出站头：版本族与 UA 统一走 [ZhihuAndroidAppIdentity]，
-     * 设备相关字段取真实值，udid 有则带（见 ZhihuAccountStore.ensureMobileUdid）。
-     */
-    internal fun androidHeaders(context: Context): Map<String, String> = buildMap {
-        val device = context.zhihuAndroidDeviceInfo()
-        put("x-api-version", ZhihuAndroidAppIdentity.API_VERSION)
-        put("x-app-version", ZhihuAndroidAppIdentity.VERSION_NAME)
-        put("x-app-build", ZhihuAndroidAppIdentity.BUILD)
-        put("x-app-bundleid", ZhihuAndroidAppIdentity.BUNDLE_ID)
-        put("x-app-flavor", ZhihuAndroidAppIdentity.FLAVOR)
-        put("x-app-za", ZhihuAndroidAppIdentity.xAppZa(device))
-        put("x-network-type", zhihuNetworkTypeName())
-        put("x-zse-93", ZhihuAndroidAppIdentity.ZSE93)
-        data.mobileUdid?.takeIf { it.isNotBlank() }?.let { put("x-udid", it) }
-    }
 
     val ANDROID_USER_AGENT: String
         get() = ZhihuAndroidAppIdentity.userAgent(currentAndroidApplicationContext().zhihuAndroidDeviceInfo())

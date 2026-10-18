@@ -168,8 +168,8 @@ fun ContentFilterSettingsScreen(
                         val currentRecommendationMode = remember {
                             mutableStateOf(
                                 RecommendationMode.entries.find {
-                                    it.key == settings.getString("recommendationMode", RecommendationMode.MIXED.key)
-                                } ?: RecommendationMode.MIXED,
+                                    it.key == settings.getString("recommendationMode", RecommendationMode.WEB.key)
+                                } ?: RecommendationMode.WEB,
                             )
                         }
                         var expanded by remember { mutableStateOf(false) }

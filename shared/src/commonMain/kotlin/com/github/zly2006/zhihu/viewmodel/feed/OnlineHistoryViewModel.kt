@@ -30,7 +30,7 @@ import com.github.zly2006.zhihu.viewmodel.deleteOnlineHistoryItem
 import kotlinx.serialization.json.JsonArray
 
 class OnlineHistoryViewModel : BaseFeedViewModel() {
-    override val initialUrl: String = "https://api.zhihu.com/unify-consumption/read_history?offset=0&limit=10"
+    override val initialUrl: String = "https://www.zhihu.com/api/v4/unify-consumption/read_history?offset=0&limit=10"
     override val shouldLogDecodeFailures: Boolean = false
     private val deletionPairs = mutableMapOf<FeedDisplayItem, OnlineHistoryDeletePair>()
 

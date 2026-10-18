@@ -105,15 +105,6 @@ class ZhihuPhoneLoginClient : AutoCloseable {
     private var deviceId: String? = null
     private var webDeviceCookie = cookies.remove("d_c0")?.takeIf(String::isNotBlank)
 
-    /**
-     * 仅做设备身份引导：走游客初始化拿到 udid 后返回，不登录、不保留游客凭证。
-     * 供网页 / Cookie 登录的账号补齐 x-udid（见 ZhihuAccountStore.ensureMobileUdid）。
-     */
-    suspend fun fetchDeviceUdid(): String {
-        ensureGuestToken()
-        return checkNotNull(deviceId) { "服务器未返回设备凭证" }
-    }
-
     suspend fun requestDigits(phoneNumber: String): ZhihuPhoneDigitsResult {
         val username = normalizePhoneNumber(phoneNumber)
         ensureGuestToken()

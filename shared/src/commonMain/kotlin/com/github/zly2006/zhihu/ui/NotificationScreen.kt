@@ -35,7 +35,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.outlined.Comment
-import androidx.compose.material.icons.filled.Bookmark
+import androidx.compose.material.icons.filled.Circle
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.MarkChatRead
 import androidx.compose.material.icons.filled.PersonAddAlt1
@@ -57,7 +57,6 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -65,40 +64,42 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import coil3.compose.AsyncImage
 import com.fleeksoft.ksoup.Ksoup
-import com.github.zly2006.zhihu.data.MobileNotificationColumnHead
 import com.github.zly2006.zhihu.data.MobileNotificationTimelineItem
+import com.github.zly2006.zhihu.data.NotificationItem
+import com.github.zly2006.zhihu.data.NotificationTarget
+import com.github.zly2006.zhihu.data.ZhihuInboxThread
+import com.github.zly2006.zhihu.data.navDestination
+import com.github.zly2006.zhihu.navigation.Article
+import com.github.zly2006.zhihu.navigation.ArticleType
 import com.github.zly2006.zhihu.navigation.LocalNavigator
 import com.github.zly2006.zhihu.navigation.NavDestination
 import com.github.zly2006.zhihu.navigation.Notification
 import com.github.zly2006.zhihu.navigation.Person
-import com.github.zly2006.zhihu.navigation.resolveContent
+import com.github.zly2006.zhihu.navigation.Pin
+import com.github.zly2006.zhihu.navigation.Question
 import com.github.zly2006.zhihu.notification.NotificationSettingsStore
 import com.github.zly2006.zhihu.notification.rememberNotificationSettingsStore
-import com.github.zly2006.zhihu.platform.rememberExternalUrlOpener
 import com.github.zly2006.zhihu.platform.rememberUserMessageSink
 import com.github.zly2006.zhihu.ui.components.PaginatedList
 import com.github.zly2006.zhihu.ui.components.ProgressIndicatorFooter
 import com.github.zly2006.zhihu.util.formatRelativeTime
-import com.github.zly2006.zhihu.viewmodel.MobileNotificationCategory
+import com.github.zly2006.zhihu.viewmodel.NotificationCategory
+import com.github.zly2006.zhihu.viewmodel.NotificationCategoryViewModel
 import com.github.zly2006.zhihu.viewmodel.NotificationEnvironment
 import com.github.zly2006.zhihu.viewmodel.NotificationViewModel
 import kotlinx.coroutines.launch
-import kotlinx.datetime.TimeZone
-import kotlinx.datetime.number
-import kotlinx.datetime.toLocalDateTime
-import kotlin.time.ExperimentalTime
-import kotlin.time.Instant
 
 @Composable
 expect fun rememberNotificationEnvironment(
@@ -106,7 +107,7 @@ expect fun rememberNotificationEnvironment(
 ): NotificationEnvironment
 
 /**
- * 通知主页复用官方 Android `message/v3` 的信息层级：四个分类、邀请回答入口和私信会话列表。
+ * 通知主页：三个网页端通知分类、邀请回答入口和私信会话列表，全部走网页端接口（见 [NotificationCategory]）。
  * 应用内显示过滤与自动已读仍由 [NotificationSettingsStore] 控制，不能借布局调整改变默认通知偏好。
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -171,28 +172,20 @@ fun NotificationScreen() {
                 isEnd = { viewModel.isEnd },
                 modifier = Modifier.fillMaxSize(),
                 footer = ProgressIndicatorFooter,
-                key = { it.stableId },
+                key = { it.id.ifBlank { it.participant.id.orEmpty() } },
                 topContent = {
                     item(key = "notification_categories") {
                         NotificationCategoryRow(
                             unreadCounts = viewModel.categoryUnreadCounts,
                             showUnreadBadges = settingsStore.getUnreadBadgeEnabled(),
                             onCategoryClick = { category ->
-                                navigator.onNavigate(
-                                    Notification.Entry(category.entryName, category.detailTitle),
-                                )
+                                navigator.onNavigate(Notification.Entry(category.entryName, category.title))
                             },
                         )
                     }
-                    viewModel.invitation?.let { invitation ->
-                        item(key = "notification_invitation") {
-                            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
-                            NotificationInvitationRow(
-                                invitation = invitation,
-                                showUnreadBadge = settingsStore.getUnreadBadgeEnabled(),
-                                onClick = { navigator.onNavigate(Notification.Invitations) },
-                            )
-                        }
+                    item(key = "notification_invitation") {
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.45f))
+                        NotificationInvitationRow(onClick = { navigator.onNavigate(Notification.Invitations) })
                     }
                     item(key = "notification_messages_divider") {
                         HorizontalDivider(
@@ -201,13 +194,19 @@ fun NotificationScreen() {
                         )
                     }
                 },
-            ) { notification ->
+            ) { thread ->
                 NotificationConversationRow(
-                    notification = notification,
+                    thread = thread,
                     showUnreadBadge = settingsStore.getUnreadBadgeEnabled(),
                     onClick = {
-                        notification.navDestination()?.let(navigator.onNavigate)
-                            ?: userMessages.showMessage("暂不支持打开此消息")
+                        val peerId = thread.participant.id
+                        if (peerId.isNullOrBlank()) {
+                            userMessages.showMessage("暂不支持打开此消息")
+                        } else {
+                            navigator.onNavigate(
+                                Notification.Message(peerId, thread.participant.name, thread.participant.avatarUrl),
+                            )
+                        }
                     },
                 )
             }
@@ -217,9 +216,9 @@ fun NotificationScreen() {
 
 @Composable
 private fun NotificationCategoryRow(
-    unreadCounts: Map<MobileNotificationCategory, Int>,
+    unreadCounts: Map<NotificationCategory, Int>,
     showUnreadBadges: Boolean,
-    onCategoryClick: (MobileNotificationCategory) -> Unit,
+    onCategoryClick: (NotificationCategory) -> Unit,
 ) {
     Row(
         modifier = Modifier
@@ -227,7 +226,7 @@ private fun NotificationCategoryRow(
             .padding(horizontal = 8.dp, vertical = 14.dp),
         horizontalArrangement = Arrangement.SpaceEvenly,
     ) {
-        MobileNotificationCategory.entries.forEach { category ->
+        NotificationCategory.entries.forEach { category ->
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -250,12 +249,12 @@ private fun NotificationCategoryRow(
                 ) {
                     Icon(
                         imageVector = category.homeIcon(),
-                        contentDescription = category.detailTitle,
+                        contentDescription = category.title,
                         modifier = Modifier.size(36.dp),
                     )
                 }
                 Text(
-                    text = category.detailTitle,
+                    text = category.title,
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
@@ -267,11 +266,7 @@ private fun NotificationCategoryRow(
 }
 
 @Composable
-private fun NotificationInvitationRow(
-    invitation: MobileNotificationColumnHead,
-    showUnreadBadge: Boolean,
-    onClick: () -> Unit,
-) {
+private fun NotificationInvitationRow(onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -291,46 +286,29 @@ private fun NotificationInvitationRow(
             }
         }
         Spacer(Modifier.width(14.dp))
-        Column(Modifier.weight(1f)) {
-            Text(
-                text = invitation.title.ifBlank { "邀请回答" },
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Spacer(Modifier.height(3.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    text = invitation.textPrefix + invitation.text,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-        }
-        if (showUnreadBadge && invitation.unreadCount > 0) {
-            Badge {
-                Text(formatUnreadCount(invitation.unreadCount))
-            }
-        }
+        Text(
+            text = "邀请回答",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+        )
     }
 }
 
 @Composable
 private fun NotificationConversationRow(
-    notification: MobileNotificationTimelineItem,
+    thread: ZhihuInboxThread,
     showUnreadBadge: Boolean,
     onClick: () -> Unit,
 ) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .testTag("notification_message_${notification.stableId}")
+            .testTag("notification_message_${thread.id}")
             .clickable(onClick = onClick)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        val avatarUrl = notification.avatarUrl()
+        val avatarUrl = thread.participant.avatarUrl
         if (avatarUrl.isNotBlank()) {
             AsyncImage(
                 model = avatarUrl,
@@ -355,16 +333,16 @@ private fun NotificationConversationRow(
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    text = notification.displayTitle(),
+                    text = thread.participant.name.ifBlank { "私信" },
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
                 )
-                notification.notificationListDate().takeIf { it.isNotBlank() }?.let { created ->
+                if (thread.updatedTime > 0) {
                     Text(
-                        text = created,
+                        text = formatRelativeTime(thread.updatedTime),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(start = 8.dp),
@@ -373,28 +351,89 @@ private fun NotificationConversationRow(
             }
             Spacer(Modifier.height(3.dp))
             Text(
-                text = notification.content?.text.orEmpty(),
+                text = Ksoup.parse(thread.snippet).text(),
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        if (showUnreadBadge && notification.unreadCount > 0) {
+        if (showUnreadBadge && thread.unreadCount > 0) {
             Spacer(Modifier.width(8.dp))
             Badge {
-                Text(formatUnreadCount(notification.unreadCount))
+                Text(formatUnreadCount(thread.unreadCount))
+            }
+        }
+    }
+}
+
+/** 一个网页端通知分类下的列表（[Notification.Entry]） */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun NotificationCategoryScreen(entry: Notification.Entry) {
+    val navigator = LocalNavigator.current
+    val settingsStore = rememberNotificationSettingsStore()
+    val environment = rememberNotificationEnvironment(settingsStore)
+    val userMessages = rememberUserMessageSink()
+    val category = NotificationCategory.entries.firstOrNull { it.entryName == entry.entryName } ?: NotificationCategory.Default
+    val viewModel = viewModel(key = "notification_category_${category.entryName}") {
+        NotificationCategoryViewModel(category)
+    }
+
+    LaunchedEffect(category) {
+        if (viewModel.allData.isEmpty()) {
+            viewModel.refresh(environment)
+        }
+    }
+
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = { Text(entry.title.ifBlank { category.title }) },
+                navigationIcon = {
+                    IconButton(onClick = navigator.onNavigateBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                ),
+            )
+        },
+    ) { paddingValues ->
+        PullToRefreshBox(
+            isRefreshing = viewModel.isLoading,
+            onRefresh = { viewModel.refresh(environment) },
+            modifier = Modifier.padding(paddingValues),
+        ) {
+            PaginatedList(
+                items = viewModel.allData,
+                onLoadMore = { viewModel.loadMore(environment) },
+                isEnd = { viewModel.isEnd },
+                modifier = Modifier.fillMaxSize(),
+                footer = ProgressIndicatorFooter,
+                key = { it.id },
+            ) { notification ->
+                if (viewModel.shouldShowNotification(settingsStore, notification)) {
+                    NotificationItemView(
+                        notification = notification,
+                        onClick = {
+                            notification.navDestination()?.let(navigator.onNavigate)
+                                ?: userMessages.showMessage("暂不支持打开此通知")
+                        },
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-fun NotificationItemView(
-    notification: MobileNotificationTimelineItem,
+private fun NotificationItemView(
+    notification: NotificationItem,
     onClick: () -> Unit,
 ) {
-    val navigator = LocalNavigator.current
     val backgroundColor = if (notification.isRead) {
         Color.Transparent
     } else {
@@ -415,155 +454,121 @@ fun NotificationItemView(
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                Box(
-                    modifier = Modifier
-                        .width(10.dp)
-                        .padding(top = 10.dp, end = 4.dp),
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f),
                 ) {
-                    if (!notification.isRead) {
-                        Surface(
-                            color = MaterialTheme.colorScheme.error,
-                            shape = CircleShape,
-                            modifier = Modifier.size(6.dp),
-                        ) {}
+                    notification.content.extend?.icon?.let { icon ->
+                        AsyncImage(
+                            model = icon,
+                            contentDescription = null,
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(MaterialTheme.colorScheme.surfaceVariant),
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
                     }
-                }
-                val avatarUrl = notification.avatarUrl()
-                if (avatarUrl.isNotBlank()) {
-                    AsyncImage(
-                        model = avatarUrl,
-                        contentDescription = null,
-                        modifier = Modifier
-                            .size(44.dp)
-                            .clip(CircleShape)
-                            .background(MaterialTheme.colorScheme.surfaceVariant),
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                }
-
-                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = notification.displayTitle(),
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis,
+                        text = buildNotificationText(notification),
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.fillMaxWidth(),
                     )
-                    notification.displaySubtitle().takeIf { it.isNotBlank() }?.let { subtitle ->
-                        Spacer(modifier = Modifier.height(3.dp))
-                        Text(
-                            text = subtitle,
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
-                    val emojisUsed = remember { mutableSetOf<String>() }
-                    val displayText = if (notification.content?.subTitle == "喜欢了你的评论") {
-                        buildAnnotatedString {
-                            append(Ksoup.parse(notification.content.subText).text())
-                        }
-                    } else if (notification.content?.subTitle?.contains("评论了") == true) {
-                        val document = Ksoup.parseBodyFragment(notification.content.abstractText)
-                        val openExternalUrl = rememberExternalUrlOpener()
-                        val string = remember(notification.content.abstractText) {
-                            emojisUsed.clear()
-                            buildAnnotatedString {
-                                dfsSimple(
-                                    node = document.body(),
-                                    onNavigate = navigator.onNavigate,
-                                    openExternalUrl = openExternalUrl::invoke,
-                                    componentUsed = emojisUsed,
-                                )
-                            }
-                        }
-
-                        string
-                    } else {
-                        buildAnnotatedString {
-                            append(Ksoup.parse(notification.content?.text.orEmpty()).text())
-                        }
-                    }
-
-                    // 创建inlineContent映射
-                    val inlineContent = rememberCommentEmojiInlineContent(emojisUsed)
-
-                    if (displayText.isNotEmpty()) {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = displayText,
-                            inlineContent = inlineContent,
-                            style = MaterialTheme.typography.bodyMedium.copy(fontSize = 13.sp),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 3,
-                            overflow = TextOverflow.Ellipsis,
-                        )
-                    }
                 }
-
-                Text(
-                    text = formatRelativeTime(notification.created),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 8.dp),
-                )
+                if (!notification.isRead) {
+                    Icon(
+                        imageVector = Icons.Default.Circle,
+                        contentDescription = "未读",
+                        modifier = Modifier.size(8.dp),
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                }
             }
 
-            notification.sourceText().takeIf { it.isNotBlank() }?.let { sourceText ->
-                Spacer(modifier = Modifier.height(10.dp))
+            notification.target?.let { target ->
+                Spacer(modifier = Modifier.height(8.dp))
                 Surface(
                     shape = RoundedCornerShape(8.dp),
                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                     modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Text(
-                        text = sourceText,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 3,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(12.dp),
-                    )
+                    Column(modifier = Modifier.padding(12.dp)) {
+                        target.title?.let { title ->
+                            Text(
+                                text = Ksoup.parse(title).text(),
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                        target.content?.takeIf { it.isNotBlank() }?.let { content ->
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = Ksoup.parse(content).text(),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 3,
+                                overflow = TextOverflow.Ellipsis,
+                            )
+                        }
+                    }
                 }
             }
+
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = formatRelativeTime(notification.createTime),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
 
-private fun MobileNotificationCategory.homeIcon(): ImageVector = when (this) {
-    MobileNotificationCategory.Comment -> Icons.AutoMirrored.Outlined.Comment
-    MobileNotificationCategory.Like -> Icons.Filled.Favorite
-    MobileNotificationCategory.Favorite -> Icons.Filled.Bookmark
-    MobileNotificationCategory.Follow -> Icons.Filled.PersonAddAlt1
-}
-
-internal fun MobileNotificationTimelineItem.displayTitle(): String =
-    content
-        ?.title
-        ?.takeIf { it.isNotBlank() }
-        ?: detailTitle.takeIf { it.isNotBlank() }
-        ?: target?.name?.takeIf { it.isNotBlank() }
-        ?: "通知"
-
-private fun MobileNotificationTimelineItem.displaySubtitle(): String {
-    val subtitle = content?.subTitle?.takeIf { it.isNotBlank() }.orEmpty()
-    if ((!subtitle.endsWith("：") && subtitle.startsWith("评论了")) ||
-        subtitle.startsWith("赞同了") ||
-        subtitle.startsWith("喜欢了")
-    ) {
-        return "$subtitle："
+@Composable
+private fun buildNotificationText(notification: NotificationItem) = buildAnnotatedString {
+    val content = notification.content
+    content.actors.forEachIndexed { index, actor ->
+        withStyle(style = SpanStyle(fontWeight = FontWeight.Bold)) {
+            append(actor.name)
+        }
+        if (index < content.actors.size - 1) append("、")
     }
-    return subtitle
+    if (notification.mergeCount > 1 && content.actors.size != notification.mergeCount) {
+        append(" 等${notification.mergeCount}人")
+    }
+    append(" ")
+    append(content.verb.trim())
+    content.target?.let { target ->
+        append(" ")
+        withStyle(style = SpanStyle(color = MaterialTheme.colorScheme.primary)) {
+            append(target.text)
+        }
+    }
 }
 
-private fun MobileNotificationTimelineItem.sourceText(): String =
-    listOfNotNull(
-        targetSource?.text?.takeIf { it.isNotBlank() },
-        targetSource?.subText?.takeIf { it.isNotBlank() },
-    ).joinToString("\n")
+private fun NotificationItem.navDestination(): NavDestination? = when (val target = target) {
+    is NotificationTarget.Comment -> target.target?.navDestination
+    is NotificationTarget.Question -> target.id.toLongOrNull()?.let { Question(it, Ksoup.parse(target.title).text()) }
+    is NotificationTarget.People -> Person(target.id, target.urlToken, name = target.name)
+    is NotificationTarget.Answer -> target.id.toLongOrNull()?.let {
+        Article(title = target.title, type = ArticleType.Answer, id = it, excerpt = target.excerpt)
+    }
+    is NotificationTarget.Article -> target.id.toLongOrNull()?.let {
+        Article(title = target.title, type = ArticleType.Article, id = it, excerpt = target.excerpt)
+    }
+    is NotificationTarget.Pin -> target.id.toLongOrNull()?.let { Pin(it) }
+    null -> null
+}
+
+private fun NotificationCategory.homeIcon(): ImageVector = when (this) {
+    NotificationCategory.Default -> Icons.AutoMirrored.Outlined.Comment
+    NotificationCategory.VoteThank -> Icons.Filled.Favorite
+    NotificationCategory.Follow -> Icons.Filled.PersonAddAlt1
+}
 
 internal fun MobileNotificationTimelineItem.avatarUrl(): String =
     head?.avatarUrl?.takeIf { it.isNotBlank() }
@@ -571,43 +576,5 @@ internal fun MobileNotificationTimelineItem.avatarUrl(): String =
         ?: target?.avatarUrl?.takeIf { it.isNotBlank() }
         ?: content?.subIcon?.takeIf { it.isNotBlank() }
         ?: ""
-
-internal fun MobileNotificationTimelineItem.navDestination(): NavDestination? {
-    val destinations = listOf(
-        content?.targetLink,
-        content?.subTargetLink,
-        targetSource?.targetLink,
-        head?.targetLink,
-    ).mapNotNull { link ->
-        link?.takeIf { it.isNotBlank() }?.let(::resolveContent)
-    }
-    val destination = destinations.firstOrNull { it is Notification.Message }
-        ?: destinations.firstOrNull { it !is Person }
-        ?: destinations.firstOrNull()
-    return if (destination is Notification.Message) {
-        destination.copy(
-            name = destination.name.ifBlank { displayTitle() },
-            avatarUrl = avatarUrl(),
-        )
-    } else {
-        destination ?: target
-            ?.takeIf { it.type == "people" && (it.urlToken.isNotBlank() || it.id.isNotBlank()) }
-            ?.let {
-                Person(
-                    id = it.id.ifBlank { Person.EMPTY_ID },
-                    urlToken = it.urlToken,
-                    name = it.name.ifBlank { "loading..." },
-                )
-            }
-    }
-}
-
-@OptIn(ExperimentalTime::class)
-private fun MobileNotificationTimelineItem.notificationListDate(): String {
-    val epochSeconds = created.takeIf { it > 0 } ?: createdStr.toLongOrNull()
-        ?: return createdStr
-    val dateTime = Instant.fromEpochSeconds(epochSeconds).toLocalDateTime(TimeZone.currentSystemDefault())
-    return "${dateTime.month.number.toString().padStart(2, '0')}-${dateTime.day.toString().padStart(2, '0')}"
-}
 
 private fun formatUnreadCount(count: Int): String = if (count > 99) "99+" else count.toString()

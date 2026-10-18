@@ -57,7 +57,9 @@ open class SearchViewModel(
     override val initialUrl: String
         get() = zhihuSearchUrl(searchQuery, searchTab, filters, restrictedMemberHashId)
 
-    override val include = "data[*].highlight,object,type"
+    // 服务端给的下一页链接指向 App 的 api.zhihu.com/search_v3，浏览器翻页时用的是 www 的同一接口，这里同样换回 www
+    override fun resolvePageUrl(): String =
+        lastPaging?.next?.replace("://api.zhihu.com/search_v3", "://www.zhihu.com/api/v4/search_v3") ?: initialUrl
 
     fun selectTab(
         environment: PaginationEnvironment,

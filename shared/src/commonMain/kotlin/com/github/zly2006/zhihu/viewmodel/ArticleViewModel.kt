@@ -375,13 +375,15 @@ class ArticleViewModel(
                     ArticleType.Answer -> "answer"
                     ArticleType.Article -> "article"
                 }
-                val action = if (remove) "remove" else "add"
-                val url = "https://api.zhihu.com/collections/contents/$contentType/${article.id}"
-                val body = "${action}_collections=$collectionId"
-
-                val response = httpClient.put(url) {
-                    contentType(ContentType.Application.FormUrlEncoded)
-                    setBody(body)
+                // 网页端收藏弹窗的请求：加入 POST、移出 DELETE 单个收藏夹的 contents（App 才用 api.zhihu.com 的 PUT）
+                val response = if (remove) {
+                    environment.deleteSigned(
+                        "https://www.zhihu.com/api/v4/collections/$collectionId/contents/${article.id}?content_type=$contentType",
+                    )
+                } else {
+                    environment.postSigned(
+                        "https://www.zhihu.com/api/v4/collections/$collectionId/contents?content_id=${article.id}&content_type=$contentType",
+                    )
                 }
 
                 if (response.status.isSuccess()) {
@@ -530,7 +532,7 @@ class ArticleViewModel(
                         ArticleType.Answer -> "answer"
                         ArticleType.Article -> "article"
                     }
-                    val collectionsUrl = "https://api.zhihu.com/collections/contents/$contentType/${article.id}?limit=50"
+                    val collectionsUrl = "https://www.zhihu.com/api/v4/collections/contents/$contentType/${article.id}?offset=0&limit=20"
                     val jojo = environment.fetchJson(collectionsUrl, "") ?: return@withContext
                     val collectionsData = ZhihuJson.decodeJson<CollectionResponse>(jojo)
                     collections.clear()
@@ -845,8 +847,8 @@ class ArticleViewModel(
             ArticleType.Article -> "https://www.zhihu.com/api/v4/comment_v5/articles/${article.id}/root_comment"
         }
         val json = environment.fetchJson(
-            url = "$url?order=score&limit=${safeRequestedCount.coerceAtMost(20)}",
-            include = "data[*].content,excerpt,headline",
+            url = "$url?order_by=score&limit=${safeRequestedCount.coerceAtMost(20)}",
+            include = "",
         ) ?: return emptyList()
         return decodeZhihuCommentData(json, safeRequestedCount)
             .map { comment ->

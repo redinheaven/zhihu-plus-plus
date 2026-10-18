@@ -153,22 +153,6 @@ class ZhihuAccountStore internal constructor(
         return true
     }
 
-    /**
-     * 设备身份引导：账号已登录但缺少 udid（网页 / Cookie 登录路径）时，
-     * 通过游客初始化补一个并保存，后续所有安卓接口带上 x-udid。失败交给调用方决定是否提示。
-     */
-    suspend fun ensureMobileUdid() {
-        val current = session
-        if (!current.login || current.mobileUdid != null) return
-        val loginClient = ZhihuPhoneLoginClient()
-        val udid = try {
-            loginClient.fetchDeviceUdid()
-        } finally {
-            loginClient.close()
-        }
-        save(current.copy(mobileUdid = udid))
-    }
-
     private fun selectVerifiedSession(session: ZhihuAccountSession) {
         accountState.selectOrAdd(session)
         replaceClient()

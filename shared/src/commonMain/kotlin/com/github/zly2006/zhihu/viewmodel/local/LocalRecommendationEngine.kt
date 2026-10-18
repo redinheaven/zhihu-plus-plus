@@ -160,13 +160,9 @@ data class LocalRecommendationEntry(
     val navDestination: NavDestination?,
 )
 
-internal fun zhihuFollowingRecommendUrl(offset: Int? = null): String =
-    buildString {
-        append("https://api.zhihu.com/moments_v3?feed_type=recommend")
-        if (offset != null) {
-            append("&offset=$offset")
-        }
-    }
+// 网页端关注页「推荐」的接口（web_moments），按页码翻页；api.zhihu.com/moments_v3 是 App 用的，网页身份不碰
+internal fun zhihuFollowingRecommendUrl(page: Int = 0): String =
+    "https://www.zhihu.com/api/v4/web_moments?feed_type=recommend&page_num=$page"
 
 internal fun zhihuTopstoryRecommendUrl(
     limit: Int,

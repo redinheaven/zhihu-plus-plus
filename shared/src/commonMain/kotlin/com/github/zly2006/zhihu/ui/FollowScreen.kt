@@ -18,9 +18,6 @@
 package com.github.zly2006.zhihu.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -32,22 +29,17 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material3.Badge
-import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.TabRowDefaults
@@ -60,21 +52,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
-import coil3.compose.AsyncImage
 import com.github.zly2006.zhihu.data.DataHolder
-import com.github.zly2006.zhihu.navigation.LocalNavigator
-import com.github.zly2006.zhihu.navigation.Person
 import com.github.zly2006.zhihu.platform.UserMessageDuration
 import com.github.zly2006.zhihu.platform.rememberSettingsStore
 import com.github.zly2006.zhihu.platform.rememberUserMessageSink
@@ -95,7 +81,6 @@ import com.github.zly2006.zhihu.ui.components.rememberPageTurnTarget
 import com.github.zly2006.zhihu.ui.topLevelReselectAction
 import com.github.zly2006.zhihu.viewmodel.feed.FollowRecommendViewModel
 import com.github.zly2006.zhihu.viewmodel.feed.FollowViewModel
-import com.github.zly2006.zhihu.viewmodel.feed.RecentMomentsViewModel
 import com.github.zly2006.zhihu.viewmodel.feed.blockableQuestion
 import com.github.zly2006.zhihu.viewmodel.rememberPaginationEnvironment
 import kotlinx.coroutines.launch
@@ -106,7 +91,6 @@ class FollowScreenData : ViewModel() {
 
 const val FOLLOW_SCREEN_TAB_ROW_TAG = "follow_screen_tab_row"
 const val FOLLOW_SCREEN_PAGER_TAG = "follow_screen_pager"
-const val FOLLOWING_USERS_ROW_TAG = "following_users_row"
 const val FOLLOW_RECOMMEND_LIST_TAG = "follow_recommend_list"
 const val FOLLOW_RECOMMEND_REFRESH_BUTTON_TAG = "follow_recommend_refresh_button"
 const val FOLLOW_DYNAMIC_LIST_TAG = "follow_dynamic_list"
@@ -264,84 +248,6 @@ private fun FollowTabRow(
 }
 
 @Composable
-fun FollowingUsersRow() {
-    val navigator = LocalNavigator.current
-    val viewModel: RecentMomentsViewModel = viewModel { RecentMomentsViewModel() }
-    val environment = rememberPaginationEnvironment(allowGuestAccess = false)
-
-    LaunchedEffect(Unit) {
-        viewModel.load(environment)
-    }
-
-    when {
-        viewModel.errorMessage != null -> {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(vertical = 12.dp),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    text = viewModel.errorMessage!!,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-        viewModel.users.isNotEmpty() -> {
-            LazyRow(
-                modifier = Modifier.testTag(FOLLOWING_USERS_ROW_TAG),
-                contentPadding = PaddingValues(horizontal = 12.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                items(viewModel.users) { user ->
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier
-                            .testTag("following_users_item_${user.actor.id}")
-                            .clickable {
-                                navigator.onNavigate(
-                                    Person(
-                                        id = user.actor.id,
-                                        urlToken = user.actor.urlToken,
-                                        name = user.actor.name,
-                                        jumpTo = "动态",
-                                    ),
-                                )
-                            }.padding(vertical = 4.dp),
-                    ) {
-                        BadgedBox(
-                            badge = {
-                                if (user.unreadCount > 0) {
-                                    Badge()
-                                }
-                            },
-                        ) {
-                            AsyncImage(
-                                model = user.actor.avatarUrl,
-                                contentDescription = user.actor.name,
-                                modifier = Modifier
-                                    .size(56.dp)
-                                    .clip(CircleShape),
-                            )
-                        }
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            text = user.actor.name,
-                            fontSize = 12.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.size(width = 60.dp, height = 18.dp),
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
 fun FollowRecommendScreen(
     scrollToTopTrigger: Int = 0,
     isActive: Boolean = true,
@@ -395,11 +301,6 @@ fun FollowRecommendScreen(
                 modifier = Modifier
                     .pageTurnViewportWithGuide(pageTurnTarget)
                     .testTag(FOLLOW_RECOMMEND_LIST_TAG),
-                topContent = {
-                    item {
-                        FollowingUsersRow()
-                    }
-                },
                 onLoadMore = { viewModel.loadMore(environment) },
                 footer = ProgressIndicatorFooter,
             ) { item ->

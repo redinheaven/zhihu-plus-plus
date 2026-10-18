@@ -181,6 +181,6 @@ class RemoteHistorySyncTest {
     }
 
     companion object {
-        private const val NEXT = "https://api.zhihu.com/unify-consumption/read_history?offset=50&limit=50"
+        private const val NEXT = "https://www.zhihu.com/api/v4/unify-consumption/read_history?offset=50&limit=50"
     }
 }

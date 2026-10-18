@@ -123,7 +123,7 @@ fun FeedAuthorBlockConfirmDialog(
         questionAuthorStats = try {
             environment
                 .fetchJson(
-                    "https://api.zhihu.com/people/${request.userId}",
+                    "https://www.zhihu.com/api/v4/members/${request.userId}",
                     "answer_count,question_count",
                 )?.let { profile ->
                     val questionCount = profile["question_count"]?.jsonPrimitive?.intOrNull

@@ -19,7 +19,6 @@ package com.github.zly2006.zhihu.ui
 
 import androidx.compose.ui.graphics.Color
 import com.github.zly2006.zhihu.data.ZhihuPrivateMessage
-import com.github.zly2006.zhihu.data.ZhihuPrivateMessagePlugin
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -27,7 +26,7 @@ class PrivateMessageContentTest {
     @Test
     fun parsesVisibleHtmlAnchorsOnly() {
         val content = ZhihuPrivateMessage(
-            content = "周报已生成，<a href=\"https://www.zhihu.com/creator/weekly\">查看周报</a>；活动地址见下方。",
+            text = "周报已生成，<a href=\"https://www.zhihu.com/creator/weekly\">查看周报</a>；活动地址见下方。",
         ).displayContent(Color.Blue) {}
 
         assertEquals("周报已生成，查看周报；活动地址见下方。", content.text)
@@ -35,22 +34,9 @@ class PrivateMessageContentTest {
     }
 
     @Test
-    fun parsesPluginExcerptButIgnoresPluginResourceUrls() {
-        val content = ZhihuPrivateMessage(
-            plugin = ZhihuPrivateMessagePlugin(
-                excerpt = "咨询详情：<a href=\"https://www.zhihu.com/question/123\">打开</a>",
-                pluginContent =
-                    """{"card":{"title":"咨询"},"tabs":[{"title":"分类","icon":"https://static.example/icon.png"}]}""",
-            ),
-        ).displayContent(Color.Blue) {}
-
-        assertEquals("咨询详情：打开", content.text)
-    }
-
-    @Test
     fun keepsDangerousAndRelativeTargetsAsPlainText() {
         val content = ZhihuPrivateMessage(
-            content =
+            text =
                 "<a href=\"javascript:alert(1)\">危险链接</a> " +
                     "<a href=\"/question/123\">相对链接</a>",
         ).displayContent(Color.Blue) {}

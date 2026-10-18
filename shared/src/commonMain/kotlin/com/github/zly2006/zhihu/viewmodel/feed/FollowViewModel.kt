@@ -17,22 +17,11 @@
 
 package com.github.zly2006.zhihu.viewmodel.feed
 
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.viewModelScope
 import com.github.zly2006.zhihu.data.Feed
 import com.github.zly2006.zhihu.data.FeedDisplayItem
-import com.github.zly2006.zhihu.data.ZhihuJson
 import com.github.zly2006.zhihu.data.sourceLabel
 import com.github.zly2006.zhihu.data.target
 import com.github.zly2006.zhihu.viewmodel.FeedDisplayEnvironment
-import com.github.zly2006.zhihu.viewmodel.ZhihuApiEnvironment
-import kotlinx.coroutines.launch
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.jsonArray
 
 class FollowViewModel : BaseFeedViewModel() {
     override val initialUrl: String
@@ -49,52 +38,7 @@ class FollowViewModel : BaseFeedViewModel() {
 }
 
 class FollowRecommendViewModel : BaseFeedViewModel() {
+    // 浏览器里 www.zhihu.com 关注页「推荐」的请求（web_moments），不再用 App 的 api.zhihu.com/moments_v3
     override val initialUrl: String
-        get() = "https://api.zhihu.com/moments_v3?feed_type=recommend"
-}
-
-class RecentMomentsViewModel : ViewModel() {
-    @Serializable
-    data class Actor(
-        val id: String,
-        val urlToken: String,
-        val name: String,
-        val avatarUrl: String,
-    )
-
-    @Serializable
-    data class FollowingUserItem(
-        val actor: Actor,
-        val unreadCount: Int,
-    )
-
-    var users = mutableStateListOf<FollowingUserItem>()
-    var isLoading by mutableStateOf(false)
-    var errorMessage by mutableStateOf<String?>(null)
-
-    fun load(environment: ZhihuApiEnvironment) {
-        if (isLoading || users.isNotEmpty()) return
-        isLoading = true
-        viewModelScope.launch {
-            try {
-                val json = environment.fetchJson("https://api.zhihu.com/moments/recent?type=raw", "") ?: return@launch
-                val dataArray = json["data"]?.jsonArray ?: return@launch
-                users.addAll(
-                    dataArray.mapNotNull { item ->
-                        try {
-                            ZhihuJson.decodeJson<FollowingUserItem>(item)
-                        } catch (e: Exception) {
-                            environment.logDecodeFailure("RecentMomentsVM", item, e)
-                            null
-                        }
-                    },
-                )
-            } catch (e: Exception) {
-                environment.handleFetchFailure("RecentMomentsVM", e)
-                errorMessage = "加载关注动态失败"
-            } finally {
-                isLoading = false
-            }
-        }
-    }
+        get() = "https://www.zhihu.com/api/v4/web_moments?feed_type=recommend&page_num=0"
 }

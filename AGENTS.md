@@ -8,7 +8,7 @@ Zhihu++ 是注重隐私、无广告的第三方知乎客户端，基于 Kotlin M
 
 - Android 为主。上游分 `full`（端侧 text2vec 模型）和 `lite` 两个 flavor；**本 fork 已合并为单一的「Jev 版」**，AI 屏蔽和关键词提取改为调用 TypeSafe Jev，见「魔改记录」。
 - 实验性桌面端（JVM，Windows MSI / Linux AppImage）、macOS 原生（Kotlin/Native）以及 iOS target。
-- 核心卖点：本地推荐算法（爬虫 + 本地打分，独立于知乎推荐）、屏蔽词 / AI 主题屏蔽 / 屏蔽用户、话题与问题、去盐选、离线阅读、zse96 v2 签名调用 Web API、模拟 Android API。
+- 核心卖点：本地推荐算法（爬虫 + 本地打分，独立于知乎推荐）、屏蔽词 / AI 主题屏蔽 / 屏蔽用户、话题与问题、去盐选、离线阅读、zse96 v2 签名调用 Web API。本 fork 从 v2.7 起所有业务请求只以网页（桌面 Chrome）身份走 www.zhihu.com 的网页端接口，只有手机号登录和身份切换还用 App 接口。
 - 本 fork 的 App 只与知乎通信，外加 AI 屏蔽用的 TypeSafe Jev / Cloudflare Workers AI；上游的遥测、在线通知、更新检查、AIGC 投票等连上游服务器的功能已全部删除。
 - 许可证：AGPL-3.0（仅 v3）。魔改后分发二进制时必须同时提供源码，保留版权头。
 
@@ -91,7 +91,8 @@ Windows 上直接跑全量 `./gradlew ktlintFormat` 会在 `shared-local-db` 的
 
 ### 数据与网络
 - 知乎 API 返回 `snake_case`，项目内 data class 一律 `camelCase`；`AccountData.fetch*()` / `decodeJson()` 内部自动 `snake_case2camelCase()`，不要手动转换。
-- 业务请求使用当前账户 store 持有的 HttpClient（Ktor）。Web API 需 `signFetchRequest(context)` 做 zse96 v2 签名；Android API 使用 `AccountData.ANDROID_HEADERS` / `ANDROID_USER_AGENT`。
+- 业务请求使用当前账户 store 持有的 HttpClient（Ktor）。Web API 需 `signFetchRequest(context)` 做 zse96 v2 签名；公共请求头（浏览器 fetch 的 Accept / Referer / sec-fetch-* 等）由 `ZhihuDataTypes.kt` 的 `ZhihuWebFetchHeaders` 统一补。
+- 新增接口前先在浏览器里看 www.zhihu.com 实际调用的是哪个接口、带什么参数，照着用；不要用 api.zhihu.com 的 App 接口（会让同一个凭证同时以浏览器和 App 两种身份出现），也不要给列表随手加 include。
 - 依赖 API 字段的新功能，先用真实请求核对字段是否返回（参考 `.agents/skills/zhihu-reproduce`），不要凭猜测设计多层 fallback。
 - 为上游服务 / 第三方库问题加的 workaround，注释必须写清原因和触发条件，有链接附链接。
 
@@ -152,6 +153,7 @@ Windows 上直接跑全量 `./gradlew ktlintFormat` 会在 `shared-local-db` 的
    | v2.4 | 2026-10-18 | 主页所有卡片都能左滑（不知道问题的回答现查详情）；底部标签页只能点按钮切换；详情页顶栏区域上下拖动滚动正文 |
    | v2.5 | 2026-10-18 | 混合推荐同一内容不再出现两次（按内容类型 + ID 去重）；打开回答时正文文字没变就不替换，避免闪一下 |
    | v2.6 | 2026-10-18 | 出站身份统一（型号 / 系统 / Build ID / 屏幕取真实值，三个客户端共用一套版本族，Web UA 换新并迁移旧值，WebView 不再覆盖成 App UA，补齐 x-udid 引导，详见魔改记录）；详情请求量优化（网页推荐卡片自带全文就不再逐条拉详情，安卓卡片只按可见位置往下 6 张拉，混合模式一次刷新 17 个以上详情请求降到 4 个） |
+   | v2.7 | 2026-10-18 | 只用网页身份（删除安卓 / 混合推荐，通知和私信改走网页端接口，api.zhihu.com 的 App 接口换成 www 对应接口），网页请求补齐浏览器头（Accept / Referer / Origin / sec-fetch-* / x-api-version），图片请求不再是 `ktor-client` UA，去掉多余 include 和重复请求头，「在电脑中打开」不再在账号里建收藏夹，详见魔改记录 |
 
 ## 上游规则的取舍
 
@@ -194,6 +196,8 @@ $ADB exec-out screencap -p > shot.png
 $ADB shell svc wifi disable; $ADB shell svc data disable   # 模拟断网，测完记得 enable
 ```
 
+- 抓包：在 scratchpad 建 venv 装 mitmproxy，`mitmdump --listen-port 18080`；`adb root` 后把 mitmproxy CA（文件名为 `openssl x509 -subject_hash_old` 的值加 `.0`）复制进用 tmpfs 覆盖的 `/system/etc/security/cacerts`（重启即失效，不改系统镜像），再 `settings put global http_proxy 10.0.2.2:18080`。测完 `settings put global http_proxy :0` 并删掉 `global_http_proxy_host` / `_port` / `_exclusion_list`，否则模拟器会一直连已关掉的代理、所有请求超时。
+- 模拟器自己会往默认 5037 端口调 adb，而 5037 被占用，这些 adb 进程会一直挂着越积越多（一次积过 140 个），用完模拟器要顺手杀掉。
 - 首次启动有两页声明，「确认」按钮中心在 y≈2243（1080x2400），底边与导航栏重叠，点边缘会点不中；尽量先 `uiautomator dump` 再按 bounds 点击。
 - 模拟器默认上网走 Wi-Fi（`wlan0`，不计流量）；关掉 Wi-Fi 后走模拟移动数据（计流量）。
 - 数据库在 `databases/content_filter_database`（含 `-wal`），可用 `run-as com.github.zly2006.zhplus.jev cat` 拉回电脑用 sqlite 查看（只对 debug 包有效，release 包不可调试）。
@@ -220,7 +224,7 @@ $ADB shell svc wifi disable; $ADB shell svc data disable   # 模拟断网，测�
 - 已读标记：`FeedCard` 用 `content_open_events`（本地打开 + 同步的知乎浏览历史）在详情行前显示「3 天前读过」。
 - 屏蔽入口：账号页新增「屏蔽列表」直达入口；首页卡片「按关键词屏蔽」弹窗支持手动输入，可选「普通屏蔽词」（带匹配范围，每个词一条规则）或「AI 主题（Jev）」，点「Jev 建议」才请求 Jev 提取关键词，结果只作为可点选的建议（默认不选），弹窗底部可跳到屏蔽列表；屏蔽列表的 NLP 标签页改名「AI 屏蔽主题」。
 - 数据同步：`shared/src/androidMain/.../ui/subscreens/AndroidSubscreenRuntimes.kt` 的 `CloudFileSyncSettings`（设置 → 系统与更新）。用 SAF 选一个文件，写入两个 SharedPreferences、`account.json`、`history.json` 和两个 Room 数据库的全部表（排除离线正文和本地推荐的爬虫缓存三表）；同步 = 本机与文件合并后写回文件（冲突以本机为准），恢复 = 文件合并进本机（冲突以文件为准）后重启应用。`MainActivity` 启动时距上次成功同步超过一天会自动同步（`syncCloudFileIfDue`）。系统自动备份配置保持上游原样，曾经的 `ConfigBackupAgent` 已删除。
-- 版本号加后缀 `-jev<版本>`（当前 `-jev2.6`）；去掉设置页「交流 & 闲聊」（上游 Discord / Telegram / issue）；实验性 UI 页脚的 issue 链接、文章导出页脚的 GitHub 地址改指向本 fork（导出署名改为「知乎++ Jev」）。
+- 版本号加后缀 `-jev<版本>`（当前 `-jev2.7`）；去掉设置页「交流 & 闲聊」（上游 Discord / Telegram / issue）；实验性 UI 页脚的 issue 链接、文章导出页脚的 GitHub 地址改指向本 fork（导出署名改为「知乎++ Jev」）。
 - 文章页顶栏：`TwoRowsTopAppBar.kt` 的 `rememberContentLinkedScrollBehavior` 让折叠量等于正文滚动距离（不先消费滚动、不吸附），`ArticleScreen` 正文顶部边距固定为展开高度，顶栏覆盖在正文上折叠；原 `PreferCollapsedExitUntilCollapsedScrollBehavior` 与吸附代码已删除。很短的回答可能收不完顶栏。
 - 首页排序：设置「推荐系统与内容过滤 → 按发布时间排序」（`homeFeedSortByPublishTime`，默认开），`HomeFeedViewModel.processResponse` 把每页按 `target.created_time` 从新到旧重排（外层 `created_time` 是请求时刻，不能用）。安卓端推荐卡片实测不带任何时间字段，所以安卓端推荐不受影响、混合推荐只排网页端那部分。
 - 删除遥测（`telemetry()`、登录前第三页遥测声明、设置项）、首页在线通知（`OnlineHomeNotification`）、AIGC 标记（`AigcVoteModels`、`AigcVoteEnvironment`、文章页标记面板与菜单项、设置项）、未接入的 `CrashReporter`、防沉迷提醒（`ContinuousUsageReminderManager` 与设置项；原 `ZhihuPolicy.kt` 只剩 `expect object Log`，改名 `Log.kt`）。
@@ -258,24 +262,31 @@ $ADB shell svc wifi disable; $ADB shell svc data disable   # 模拟断网，测�
 - 账号页精简：去掉「查看收藏夹」「查看关注订阅」「搜索设置项」「朗读与播放」；「关于」只留版本号（GitHub 地址、项目协议、开源许可入口和免责提示删除，设置搜索页和开源许可页本身还在）。
 - 收藏夹：「我的收藏夹」一行两个；顶部关键词搜索（`viewmodel/CollectionSearchViewModel.kt`）。第一次搜索时列出所有收藏夹的回答和文章，本地没有正文的逐条拉详情（联网的间隔 1.5 秒），抽成按段落的纯文本存进 `collection_search_index.json`（App 私有目录，永久保留，之后只补新收藏、去掉取消收藏的）；结果列出命中的句子，点开时 `Article.searchKeyword` / `searchSentence` 让正文给关键词包上 `<mark>`（`markCollectionSearchKeyword`）并滚到那段。滚动靠内置渲染库新加的 `LocalMarkdownHighlightRequester`（`third_party/markdown/markdown-renderer` 的 `RendererContext.kt`、`BlockRenderer.kt`：含高亮的段落和标题挂上 `bringIntoViewRequester`）。
 - 出站身份统一（`account/ZhihuAndroidAppIdentity.kt`）：feed / 身份切换 / 手机号登录三个客户端曾各写一套模拟器型号（`sdk_gphone64_arm64`、`Android SDK built for arm64`）和三个 App 版本（10.61.0 / 11.2.0 / 11.4.0），现在共用一套版本族（11.4.0 / 40408 / `x-api-version` 3.0.93 / `x-zse-93` 101_1_1.0 / flavor zhihuwap64），UA 与 `x-app-za` 由 `ZhihuPhoneLoginDeviceInfo` 的设备字段拼接（Android 取 `Build.*` + 真实屏幕尺寸；桌面 / Apple 平台虚构一套自洽的 Pixel 6）；`x-app-za` 省略 Installer（原来是写死的「灰度 / Market / 荣耀商店」）。Web 默认 UA（`DEFAULT_ZHIHU_USER_AGENT`）由 Ubuntu Chrome 9 换成 `ZHIHU_DESKTOP_USER_AGENT`（Chrome 145），读取账号时自动迁移旧值（`LEGACY_ZHIHU_USER_AGENT`），Web 客户端补 `sec-ch-ua` 客户端提示头。WebView 不再覆盖成 App UA（`WebviewActivity` 两处、登录页 `configureWebLogin` 一处；风控页桌面 UA 保留）。udid：手机登录返回的 udid 存进 session（`mobileUdid`），网页 / Cookie 登录的账号由 `MainActivity` 启动时走游客初始化（`ZhihuAccountStore.ensureMobileUdid`，复用 `ZhihuPhoneLoginClient.fetchDeviceUdid`）补齐，安卓各接口带 `x-udid`。
+- 只用网页身份（v2.7）：抓包对照浏览器里 www.zhihu.com 的真实请求后，删掉安卓 / 混合推荐（`viewmodel/za/` 整个删除，`RecommendationMode` 只剩 WEB / LOCAL，存着旧值的回退到 WEB）、`mobileHomeFeedHttpClient` / `MobileHomeFeedEnvironment`、`AccountData.androidHeaders`、启动时的 udid 引导（`ensureMobileUdid` / `fetchDeviceUdid`）。只剩手机号登录和身份切换还以安卓 App 身份请求（本来就是 App 专有功能，用户主动操作才发）。
+  - 接口换成网页端用的：首页推荐 `www/api/v3/feed/topstory/recommend?limit=10&desktop=true`（原 api.zhihu.com，删掉解析失败换主机的逻辑）；关注「推荐」`www/api/v4/web_moments?feed_type=recommend&page_num=0`（本地推荐爬虫同）；阅读历史 `www/api/v4/unify-consumption/read_history`、删除 `www/api/v4/read_history/batch_del`；作者页 `www/api/v4/members/{token}`（include 要写 `badge[?(type=best_answerer)].topics` 才返回 badge_v2）；收藏状态 `www/api/v4/collections/contents/{类型}/{id}`，加入 / 移出收藏夹改为 POST / DELETE `www/api/v4/collections/{收藏夹}/contents`；搜索下一页把服务端给的 api.zhihu.com 链接换回 www。作者页的 GitHub 社交账号（`profile/detail`，网页端没有）删除。
+  - 通知（`NotificationViewModel.kt` 重写）：三个分类用网页端 v2 `notifications/v2/{default|vote_thank|follow}`（「评论与邀请 / 赞同与喜欢 / 新关注」，网页端 v3 的分类入口实测返回空），未读数取 `/api/v4/me` 的 `*_notifications_count`（首页铃铛同），已读 `v2/{分类}/actions/readall`；邀请回答用 `www/api/v4/notifications/v3/timeline/entry/invite`（网页端问题路由面板同一入口）；私信会话列表 `www/api/v4/inbox`，会话 `www/api/v4/chat?sender_id=`（按 `user_type` 分左右，翻页用 `after_id`），发送 POST `www/api/v4/chat`（JSON，发送接口未实测）。上游 #503 前的网页版通知条目渲染恢复为 `NotificationCategoryScreen`。原「收藏了我」分类网页端没有，去掉。
+  - 请求头（`ZhihuDataTypes.kt` 的 `ZhihuWebFetchHeaders`，Send 阶段，只对知乎域名）：Accept `*/*`（盖掉 ContentNegotiation 的 application/json）、Accept-Language、Referer（关注动态用 /follow）、非 GET 带 Origin、sec-fetch-*、首页推荐和关注动态带 `x-api-version: 3.0.53`；游客客户端也走同一套配置。`lastread/touch` 改为不签名、去掉重复的 `x-requested-with`（浏览器就不签名）。`PaginationViewModel.include` 默认改为空（上游给所有列表加 `data[*].content,excerpt,headline,target.author.badge_v2`，还会覆盖 paging.next 里服务端自带的 include），只有问题回答列表用网页端问题页的 include。回答页阅读历史每次打开只报一次（从作者页 / 评论返回不再重报）。
+  - 图片：Coil 换成自建的 Ktor 客户端（`MainActivity`），带 Chrome UA、图片 Accept、Referer、sec-fetch-dest image；Android 12 以下不声明 avif（声明了 zhimg 会返回 AVIF，系统解不了）。
+  - 「在电脑中打开」：上游会在账号里建一个描述为 `com.github.zly2006.zhplus.openinbrowser` 的私密收藏夹，等于在服务端留标记；改为直接用浏览器打开网页（与桌面端一致），菜单文字改「在浏览器中打开」。
 - 上游 CI（`.github/workflows`）仍按 full / lite 构建并发布到上游 release，本 fork 未改，不要直接启用。
 
 ## 已知问题与待办
 
-- 首页广告卡片：安卓推荐模式按作者位置的「广告」字样过滤（依据界面上看到的现象，没抓到原始 JSON 核对）；网页推荐模式如再出现漏网需另查。
+- 首页广告卡片：网页推荐如再出现漏网需另查（原安卓推荐的「广告」字样过滤随安卓推荐一起删除）。
 - 离线头像：现在会随正文预下载作者头像，但列表卡片用的头像 URL 可能和详情里的尺寸不同，未在断网下实测。
 - 「数据同步」（`AndroidSubscreenRuntimes.kt` 的 `CloudFileSyncSettings`）只编译通过，未在设备上实测写入、合并与恢复。
-- 网络误报（v1.9）：联网时偶发解析失败的静默重试、首页 api → www 切换只能在真实网络里出现，模拟器上无法复现，待手机实测；若仍提示，看提示里的域名再决定下一步。安卓推荐 / 混合推荐用的是安卓客户端接口，没有 www 等价接口，只重试不切换。
+- 网络误报（v1.9）：联网时偶发解析失败的静默重试、只能在真实网络里出现，模拟器上无法复现，待手机实测；若仍提示，看提示里的域名再决定下一步（v2.7 起首页本身就走 www，原 api → www 切换已删除）。
 - 未实测：评论超过 500 字折叠（模拟器上没遇到长评论）、屏蔽认证用户、文章卡片的收藏数（未核实接口是否返回，暂不显示）。
 - macOS / iOS 代码在 Windows 上无法编译，v1.7 起的删改（更新检查、字体下载器、AIGC 等）只保证 Android 与桌面 JVM 编译通过。
 - README 截图（`fastlane/metadata/android/zh-CN/images/phoneScreenshots/`）为 v1.9 在模拟器上的实拍（关注页的关注者头像一栏已打码），图标 `fastlane/.../images/icon.png` 为新图标。v2.x 改了账号页、卡片（字数）等，截图已过时，需要重拍。
 - 已实测通过（`zhihu_api30` 模拟器）：离线阅读、图片预下载、刷新两页、已读标记、屏蔽弹窗手动输入、新图标（桌面与「关于」页）、断网显示离线内容与恢复后自动刷新、回答卡片收藏数、评论左滑屏蔽评论者、AI Key 卡片显示；v2.0 的打开详情命中缓存、可见卡片延后移除、下拉刷新替换、预取换上（约 8ms）与换上后继续翻页、预取时不记已展示、进程被杀后恢复、冷启动显示预取批次、切出切回不刷新；v2.5 之后的请求量（详情请求数、预取与换上、屏蔽词过滤网页和安卓卡片、有屏蔽话题时恢复拉详情、菜单话题现查、字数显示）。
-- 只编译通过、未在设备上实测：评论长按复制 / 双击收藏、收藏夹搜索整条流程（建索引、搜索、打开后滚动高亮）、详情页右划返回和顶栏拖动、主页卡片左滑屏蔽问题、安卓推荐的赞数质量屏蔽、正文闪烁修复（原因是推断的：缓存版和联网版正文有细微差异导致整篇重排）、混合推荐去重、删除朗读后的各页面。
-- 出站身份统一已实测（`zhihu_api30` 模拟器）：临时 logcat 核对实际出站头为真实机型 / 系统 / Build ID + 11.4.0 / 40408 / x-api-version 3.0.93 / 无 Installer / 真实屏幕与网络类型；udid 引导成功并落盘（`account.json` 的 `mobileUdid`，安卓接口带 `x-udid`）；Web UA 迁移成 Chrome 145 落盘；混合推荐（安卓 + 网页卡片）、文章详情、通知角标正常，无请求失败日志。未验证：身份切换接口（需子账号）、手机登录完整流程、网页登录去掉 UA 覆盖后的登录（模拟器风控受限）、WebviewActivity 页面、关注 / 热榜等其他 feed——需真机确认。
-- 出站身份的已知残留：风控 WebView（`AndroidLoginUi.configureRiskControlWebView`）仍用桌面 Chrome UA，与移动端 client hints 不一致；游客态不带 `x-udid`、多账号各自持一份 udid；官方实验分组字段未补齐（无可靠依据）；TLS 指纹与 UA 不符（网页接口自称 Chrome 但握手是平台 TLS，Ktor 层无解）。
-- 混合推荐模式下同一个登录凭证同时以网页浏览器和安卓客户端两种身份请求，这是混合模式本身的做法，不改模式就消除不了；固定用网页推荐时额外请求最少。
-- 安卓推荐卡片按滑动位置过滤：快速往下甩很远时，偶尔会看到一张本该被屏蔽的卡片，滑出屏幕后才消失。
+- 只编译通过、未在设备上实测：评论长按复制 / 双击收藏、收藏夹搜索整条流程（建索引、搜索、打开后滚动高亮）、详情页右划返回和顶栏拖动、主页卡片左滑屏蔽问题、正文闪烁修复（原因是推断的：缓存版和联网版正文有细微差异导致整篇重排）、删除朗读后的各页面；v2.7 的私信发送（只按网页端代码写了请求，没真发）、加入 / 移出收藏夹、清空浏览历史、标记全部已读按钮。
+- v2.6 出站身份统一的实测结论（真实机型 / 版本族 / udid 引导 / 混合推荐）已随 v2.7 删除安卓身份而过时。v2.7 已实测（`zhihu_api30` 模拟器 + mitmproxy 抓包，debug 包）：首页推荐、关注推荐 / 动态、回答 / 文章 / 问题页、评论、搜索翻页、浏览历史、作者页（资料、回答、关注列表）、通知主页（分类未读数、私信会话列表）、「赞同与喜欢」分类、邀请回答、私信会话，所有请求均为网页身份、无 api.zhihu.com 和重复请求头，图片头像正常。未验证：身份切换接口（需子账号）、手机登录完整流程、网页登录（模拟器风控受限）、WebviewActivity 页面。
+- 出站身份的已知残留：风控 WebView（`AndroidLoginUi.configureRiskControlWebView`）用桌面 Chrome UA，与登录后网页身份一致；手机号登录、身份切换仍是 App 身份（`ZhihuAndroidAppIdentity`），只在用户主动操作时发出；其余见上一条「网页身份仍无法消除的差异」。
+- 作者页「粉丝」列表（v2.7）：`www/api/v4/members/{token}/followers` 对 App 的请求返回 403，同样参数和同一个签名在浏览器里是 200（`followees` 也正常），是这个接口单独的风控，推测查 `x-zst-81`（浏览器脚本生成的风控令牌）或 TLS 指纹；上游改用 App 的 api.zhihu.com 绕过，本 fork 不用 App 接口，目前加载不出。
+- 网页身份仍无法消除的差异：TLS 握手和 HTTP/1.1（浏览器是 HTTP/2）、`Accept-Encoding` 只有 gzip、缺少 `x-zst-81`、Cookie 里没有浏览器脚本写的 `__zse_ck` / `SESSIONID` / 统计 Cookie，也没有埋点上报。抓包时还看到大多数接口不校验 `x-zse-96`（乱填也 200），`members/{token}/answers` 等少数接口校验，App 的签名能通过。
+- 关注页「动态」里会出现「知乎广告」卡片（网页端 moments 本身返回），未过滤。
 - 首次添加屏蔽话题时，当前列表里的网页推荐卡片没拉过详情、不知道话题，不会立刻被移除，下次刷新才按话题过滤。
 - 收藏夹搜索：关键词被加粗、链接等格式拆开时能搜到但不高亮、不滚动；开了提椠渲染器时只打开不滚动；「数据同步」不包含收藏索引，换手机后首次搜索重建。
 - 一直失败的两个 JVM 单元测试（与本 fork 改动无关，未修）：`MobileHomeFeedParserTest`（期望卡片末尾有已删除的「手机版推荐」标签）、`ArticleExportHtmlTest`（期望上游的 GitHub 地址）。
-- release 包验证：v1.3 做过基本验证（首页、正文、切换回答、下拉刷新、账号页无崩溃）；v2.6 在 `zhihu_api30` 模拟器冒烟通过（混合推荐首页、文章详情、通知角标、出站身份生效）；v2.0～v2.5 的 release 包未在设备上装过；公式、代码块、图片预览等没逐项测。
+- release 包验证：v1.3 做过基本验证（首页、正文、切换回答、下拉刷新、账号页无崩溃）；v2.6 在 `zhihu_api30` 模拟器冒烟通过；v2.7 的 release 包在 `zhihu_api30` 模拟器冒烟通过（首页、通知主页、私信会话、「赞同与喜欢」、邀请回答、关注推荐，R8 后新增的通知 / 私信模型解码正常）；v2.0～v2.5 的 release 包未在设备上装过；公式、代码块、图片预览等没逐项测。

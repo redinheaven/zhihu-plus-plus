@@ -22,8 +22,8 @@ enum class RecommendationMode(
     val key: String,
     val description: String,
 ) {
+    // 本 fork 只保留网页端推荐：安卓端 / 混合推荐会让同一个登录凭证同时以浏览器和安卓 App 两种身份出现。
+    // 存着旧值 android / mixed 的设置读取时找不到，回退到 WEB
     WEB("Web 端推荐", "server", "使用知乎网页端的推荐算法"),
-    ANDROID("安卓端推荐", "android", "使用知乎安卓端的推荐算法"),
     LOCAL("本地推荐", "local", "基于本地数据的推荐算法"),
-    MIXED("混合推荐", "mixed", "融合安卓和网页端推荐算法，并过滤盐选内容"),
 }

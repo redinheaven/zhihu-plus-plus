@@ -34,6 +34,8 @@ import io.ktor.client.HttpClientConfig
 import io.ktor.client.engine.HttpClientEngineConfig
 import io.ktor.client.plugins.DefaultRequest
 import io.ktor.client.plugins.UserAgent
+import io.ktor.client.plugins.api.Send
+import io.ktor.client.plugins.api.createClientPlugin
 import io.ktor.client.plugins.cache.HttpCache
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.plugins.cookies.HttpCookies
@@ -44,8 +46,11 @@ import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
+import io.ktor.http.encodedPath
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
@@ -97,6 +102,37 @@ fun <T : HttpClientEngineConfig> HttpClientConfig<T>.installZhihuCommonClientCon
         header("sec-ch-ua", DESKTOP_SEC_CH_UA)
         header("sec-ch-ua-mobile", DESKTOP_SEC_CH_UA_MOBILE)
         header("sec-ch-ua-platform", DESKTOP_SEC_CH_UA_PLATFORM)
+    }
+    install(ZhihuWebFetchHeaders)
+}
+
+/**
+ * 补齐 Chrome 在 www.zhihu.com 页面里发 fetch 时必带、而 Ktor 不会带的头（对照浏览器实际请求）。
+ * 放在 Send 阶段：Accept 要盖掉 ContentNegotiation 加的 application/json，浏览器 fetch 发的是通配类型。
+ * 只作用于知乎域名，别的域名不带 Referer 等页面信息。
+ */
+private val ZhihuWebFetchHeaders = createClientPlugin("ZhihuWebFetchHeaders") {
+    on(Send) { request ->
+        val host = request.url.host
+        if (host == "zhihu.com" || host.endsWith(".zhihu.com")) {
+            val headers = request.headers
+            val path = request.url.encodedPath
+            val isMoments = path.startsWith("/api/v3/moments") || path.startsWith("/api/v4/web_moments")
+            headers[HttpHeaders.Accept] = "*/*"
+            headers[HttpHeaders.AcceptLanguage] = "zh-CN,zh;q=0.9"
+            if (HttpHeaders.Referrer !in headers) {
+                headers[HttpHeaders.Referrer] = if (isMoments) "https://www.zhihu.com/follow" else "https://www.zhihu.com/"
+            }
+            // 网页端只在首页推荐和关注动态上带这个版本号
+            if (isMoments || path.startsWith("/api/v3/feed/topstory/recommend")) headers["x-api-version"] = "3.0.53"
+            if (request.method != HttpMethod.Get && request.method != HttpMethod.Head) {
+                headers[HttpHeaders.Origin] = "https://www.zhihu.com"
+            }
+            headers["sec-fetch-dest"] = "empty"
+            headers["sec-fetch-mode"] = "cors"
+            headers["sec-fetch-site"] = if (host == "www.zhihu.com") "same-origin" else "same-site"
+        }
+        proceed(request)
     }
 }
 

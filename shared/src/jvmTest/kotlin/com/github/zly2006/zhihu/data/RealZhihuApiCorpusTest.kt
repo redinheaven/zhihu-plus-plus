@@ -17,13 +17,10 @@
 
 package com.github.zly2006.zhihu.data
 
-import com.github.zly2006.zhihu.viewmodel.za.parseMobileHomeFeedDisplayItem
 import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
-import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -57,9 +54,6 @@ class RealZhihuApiCorpusTest {
                 .images
                 .single(),
         )
-
-        val mobile = assertNotNull(parseMobileHomeFeedDisplayItem(fixtureJson("mobile-home-card.json").jsonObject))
-        assertNotNull(mobile.navDestination)
 
         val moments = fixtureJson("moments-feed-items.json").jsonArray.map { ZhihuJson.decodeJson<Feed>(it) }
         val voteupAnswer = assertIs<CommonFeed>(moments[0])

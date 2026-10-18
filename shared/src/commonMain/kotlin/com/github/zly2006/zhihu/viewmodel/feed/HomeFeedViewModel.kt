@@ -36,10 +36,10 @@ import com.github.zly2006.zhihu.viewmodel.PaginationEnvironment
 import com.github.zly2006.zhihu.viewmodel.QualityFilterMode
 import com.github.zly2006.zhihu.viewmodel.filter.ContentDetailProvider
 import com.github.zly2006.zhihu.viewmodel.filter.extractTopicIds
-import com.github.zly2006.zhihu.viewmodel.postSigned
 import io.ktor.client.request.forms.MultiPartFormDataContent
 import io.ktor.client.request.forms.formData
 import io.ktor.client.request.header
+import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.DelicateCoroutinesApi
@@ -155,31 +155,15 @@ interface HomeFeedInteractionViewModel {
 class HomeFeedViewModel :
     BaseFeedViewModel(),
     HomeFeedInteractionViewModel {
+    // 和浏览器里 www.zhihu.com 首页的请求一致（参数顺序、不带 include）；api.zhihu.com 的同名接口是 App 用的，网页身份不碰
     override val initialUrl: String
-//        get() = "https://www.zhihu.com/api/v3/feed/topstory/recommend?desktop=true&limit=10"
-        get() = "https://api.zhihu.com/topstory/recommend"
+        get() = "https://www.zhihu.com/api/v3/feed/topstory/recommend?limit=10&desktop=true"
 
     init {
         allowGuestAccess = true
     }
 
     override val pagesPerRefresh = 2
-
-    /**
-     * api.zhihu.com 要经 CDN 别名（eo.dnse0.com）二次解析，部分家用路由器上会解析失败，而 www.zhihu.com 正常。
-     * 两个推荐接口实测返回结构一致（www 版不带卡片缩略图），所以 api 解析失败后本次运行改用 www 版。
-     */
-    private var useWebHost = false
-
-    override fun resolvePageUrl(): String =
-        if (useWebHost) {
-            lastPaging?.next?.takeIf { it.startsWith("https://www.zhihu.com/") }
-                ?: "https://www.zhihu.com/api/v3/feed/topstory/recommend?desktop=true&limit=10"
-        } else {
-            super.resolvePageUrl()
-        }
-
-    override fun switchHostAfterResolutionFailure(): Boolean = !useWebHost.also { useWebHost = true }
 
     public override suspend fun fetchFeeds(environment: PaginationEnvironment) {
         super.fetchFeeds(environment)
@@ -261,7 +245,8 @@ class HomeFeedViewModel :
                     else -> null
                 }
                 if (payloadItem != null) {
-                    environment.postSigned("https://www.zhihu.com/lastread/touch") {
+                    // 网页端上报 lastread 不带 zse 签名，和浏览器保持一致
+                    environment.httpClient().post("https://www.zhihu.com/lastread/touch") {
                         header("x-requested-with", "fetch")
                         setBody(
                             MultiPartFormDataContent(

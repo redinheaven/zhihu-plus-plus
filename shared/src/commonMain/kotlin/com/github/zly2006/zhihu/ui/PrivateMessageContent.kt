@@ -32,8 +32,7 @@ internal fun ZhihuPrivateMessage.displayContent(
     linkColor: Color,
     onLinkClick: (String) -> Unit,
 ): AnnotatedString {
-    val source = plugin?.excerpt?.takeIf(String::isNotBlank)
-        ?: content.takeIf(String::isNotBlank)
+    val source = text.takeIf(String::isNotBlank)
         ?: return AnnotatedString("暂不支持显示这条消息")
     val document = Ksoup.parseBodyFragment(source)
     val text = document.text()

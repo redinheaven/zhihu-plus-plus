@@ -313,7 +313,11 @@ fun ArticleScreen(
     }
     ArticleImmersiveModeEffect(isImmersiveMode)
 
-    LaunchedEffect(Unit) {
+    // 从这里进作者页、评论再返回时会重新进入组合，用可保存状态保证每次打开只记一次（浏览器里同一页面也只报一次）
+    var readHistoryRecorded by rememberSaveable(article.id) { mutableStateOf(false) }
+    LaunchedEffect(article.id) {
+        if (readHistoryRecorded) return@LaunchedEffect
+        readHistoryRecorded = true
         environment.addReadHistory(
             contentToken = article.id.toString(),
             contentTypeName = article.type.name.lowercase(),

@@ -46,13 +46,12 @@ import com.github.zly2006.zhihu.navigation.CommentHolder
 import com.github.zly2006.zhihu.navigation.NavDestination
 import com.github.zly2006.zhihu.notification.NotificationSettingsStore
 import com.github.zly2006.zhihu.platform.UserMessageSink
-import com.github.zly2006.zhihu.platform.rememberUserMessageSink
+import com.github.zly2006.zhihu.platform.rememberExternalUrlOpener
 import com.github.zly2006.zhihu.ui.article.prepareContentDocument
 import com.github.zly2006.zhihu.ui.components.WebviewComp
 import com.github.zly2006.zhihu.ui.components.setupUpWebviewClient
 import com.github.zly2006.zhihu.util.EmojiManager
 import com.github.zly2006.zhihu.util.Log
-import com.github.zly2006.zhihu.util.OpenInBrowser
 import com.github.zly2006.zhihu.util.createEmojiInlineContent
 import com.github.zly2006.zhihu.util.fuckHonorService
 import com.github.zly2006.zhihu.viewmodel.SharedAndroidNotificationEnvironment
@@ -87,17 +86,11 @@ private fun Context.zhihuVersionInfo(): String {
 
 @Composable
 actual fun rememberArticleBrowserOpener(): ArticleBrowserOpener {
-    val context = LocalContext.current.applicationContext
-    val coroutineScope = rememberCoroutineScope()
-    val userMessages = rememberUserMessageSink()
-    return remember(context, coroutineScope, userMessages) {
+    // 上游这里会在账号里建一个描述为包名的私密收藏夹（等浏览器插件来取），等于在知乎服务端留下第三方客户端的标记，改为直接用浏览器打开
+    val openExternalUrl = rememberExternalUrlOpener()
+    return remember(openExternalUrl) {
         object : ArticleBrowserOpener {
-            override fun invoke(article: Article) {
-                coroutineScope.launch {
-                    OpenInBrowser.openUrlInBrowser(context, article)
-                    userMessages.showMessage("已发送到浏览器")
-                }
-            }
+            override fun invoke(article: Article) = openExternalUrl(articleWebUrl(article))
         }
     }
 }

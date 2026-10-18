@@ -76,9 +76,9 @@ const val ZHIHU_DESKTOP_USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) 
 private const val UDID_URL = "https://www.zhihu.com/udid"
 private const val CAPTCHA_V2_URL = "https://www.zhihu.com/api/v3/oauth/captcha/v2?type=captcha_sign_in"
 private const val QRCODE_URL = "https://www.zhihu.com/api/v3/account/api/login/qrcode"
-internal const val DESKTOP_SEC_CH_UA = "\"Not:A-Brand\";v=\"99\", \"Google Chrome\";v=\"145\", \"Chromium\";v=\"145\""
-internal const val DESKTOP_SEC_CH_UA_MOBILE = "?0"
-internal const val DESKTOP_SEC_CH_UA_PLATFORM = "\"Windows\""
+const val DESKTOP_SEC_CH_UA = "\"Not:A-Brand\";v=\"99\", \"Google Chrome\";v=\"145\", \"Chromium\";v=\"145\""
+const val DESKTOP_SEC_CH_UA_MOBILE = "?0"
+const val DESKTOP_SEC_CH_UA_PLATFORM = "\"Windows\""
 private const val DEFAULT_QR_LOGIN_DEADLINE_MILLIS = 120_000L
 private const val MAX_QR_LOGIN_TTL_SECONDS = 86_400L
 private const val MAX_QR_LOGIN_TTL_MILLIS = MAX_QR_LOGIN_TTL_SECONDS * 1000

@@ -201,9 +201,7 @@ fun PrivateMessageScreen(destination: Notification.Message) {
             ) { message ->
                 PrivateMessageBubble(
                     message = message,
-                    incoming = message.sender?.let { sender ->
-                        sender.id == destination.peerId || sender.urlToken == destination.peerId
-                    } == true,
+                    peerAvatar = peerAvatar,
                 )
             }
         }
@@ -213,12 +211,13 @@ fun PrivateMessageScreen(destination: Notification.Message) {
 @Composable
 private fun PrivateMessageBubble(
     message: ZhihuPrivateMessage,
-    incoming: Boolean,
+    peerAvatar: String,
 ) {
+    val incoming = message.incoming
     val navigator = LocalNavigator.current
     val openWebUrl = rememberZhihuWebUrlOpener()
     val linkColor = MaterialTheme.colorScheme.primary
-    val displayText = remember(message.content, message.plugin, linkColor, navigator, openWebUrl) {
+    val displayText = remember(message.text, linkColor, navigator, openWebUrl) {
         message.displayContent(linkColor) { url ->
             resolveContent(url)?.let(navigator.onNavigate) ?: openWebUrl(url)
         }
@@ -233,7 +232,7 @@ private fun PrivateMessageBubble(
     ) {
         if (incoming) {
             AsyncImage(
-                model = message.sender?.avatarUrl,
+                model = peerAvatar,
                 contentDescription = null,
                 modifier = Modifier
                     .size(34.dp)

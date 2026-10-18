@@ -358,31 +358,6 @@ class ZhihuPhoneLoginClientTest {
         client.close()
     }
 
-    @Test
-    fun fetchDeviceUdidOnlyInitializesGuestIdentity() = runTest {
-        val cookies = mutableMapOf<String, String>()
-        var requestIndex = 0
-        val client = phoneLoginTestClient(
-            MockEngine { request ->
-                requestIndex++
-                when (requestIndex) {
-                    1 -> respond(
-                        content = "web-device-id",
-                        headers = headersOf(HttpHeaders.SetCookie, "d_c0=device-cookie; Path=/; Domain=zhihu.com"),
-                    )
-
-                    2 -> respondJson(INITIALIZATION_RESPONSE)
-
-                    else -> error("Unexpected request #$requestIndex")
-                }
-            },
-            cookies,
-        )
-        assertEquals("device-id", client.fetchDeviceUdid())
-        assertEquals(2, requestIndex)
-        client.close()
-    }
-
     private fun phoneLoginTestClient(
         engine: MockEngine,
         cookies: MutableMap<String, String>,
