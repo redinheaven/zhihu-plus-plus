@@ -281,12 +281,6 @@ fun FollowRecommendScreen(
         }
     }
 
-    LaunchedEffect(viewModel.errorMessage) {
-        viewModel.errorMessage?.let {
-            userMessages.showMessage(it, UserMessageDuration.Long)
-        }
-    }
-
     var feedAuthorBlockRequest by remember { mutableStateOf<FeedAuthorBlockRequest?>(null) }
     val pageTurnTarget = rememberPageTurnTarget(
         listState = listState,
@@ -404,12 +398,6 @@ fun FollowDynamicScreen(
     LaunchedEffect(Unit) {
         if (viewModel.displayItems.isEmpty()) {
             viewModel.refresh(environment)
-        }
-    }
-
-    LaunchedEffect(viewModel.errorMessage) {
-        viewModel.errorMessage?.let {
-            userMessages.showMessage(it, UserMessageDuration.Long)
         }
     }
 

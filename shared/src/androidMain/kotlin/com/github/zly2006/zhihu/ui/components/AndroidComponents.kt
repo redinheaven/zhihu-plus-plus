@@ -117,7 +117,7 @@ actual suspend fun extractFeedKeywords(
     title = title,
     excerpt = excerpt,
     content = null,
-    topN = 10,
+    topN = 4,
     extractor = androidKeywordWeightExtractor,
 )
 

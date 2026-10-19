@@ -95,12 +95,6 @@ fun HotListScreen(
         cachedScrollToTopTrigger = scrollToTopTrigger
     }
 
-    LaunchedEffect(viewModel.errorMessage) {
-        viewModel.errorMessage?.let {
-            userMessages.showMessage(it, UserMessageDuration.Long)
-        }
-    }
-
     Column {
         FeedPullToRefresh(viewModel, environment) {
             PaginatedList(

@@ -307,12 +307,6 @@ fun SearchScreen(
         }
     }
 
-    LaunchedEffect(viewModel.errorMessage) {
-        viewModel.errorMessage?.let {
-            userMessages.showMessage(it, UserMessageDuration.Long)
-        }
-    }
-
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         topBar = {

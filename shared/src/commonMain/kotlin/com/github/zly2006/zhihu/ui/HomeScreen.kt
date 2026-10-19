@@ -616,13 +616,6 @@ fun HomeScreen(
         }
     }
 
-    // 显示错误信息
-    LaunchedEffect(viewModel.errorMessage) {
-        viewModel.errorMessage?.let {
-            userMessages.showMessage(it, UserMessageDuration.Long)
-        }
-    }
-
     var feedAuthorBlockRequest by remember { mutableStateOf<FeedAuthorBlockRequest?>(null) }
 
     // 按关键词屏蔽对话框
