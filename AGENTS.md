@@ -155,6 +155,7 @@ Windows 上直接跑全量 `./gradlew ktlintFormat` 会在 `shared-local-db` 的
    | v2.6 | 2026-10-18 | 出站身份统一（型号 / 系统 / Build ID / 屏幕取真实值，三个客户端共用一套版本族，Web UA 换新并迁移旧值，WebView 不再覆盖成 App UA，补齐 x-udid 引导，详见魔改记录）；详情请求量优化（网页推荐卡片自带全文就不再逐条拉详情，安卓卡片只按可见位置往下 6 张拉，混合模式一次刷新 17 个以上详情请求降到 4 个） |
    | v2.7 | 2026-10-18 | 只用网页身份（删除安卓 / 混合推荐，通知和私信改走网页端接口，api.zhihu.com 的 App 接口换成 www 对应接口），网页请求补齐浏览器头（Accept / Referer / Origin / sec-fetch-* / x-api-version），图片请求不再是 `ktor-client` UA，去掉多余 include 和重复请求头，「在电脑中打开」不再在账号里建收藏夹，详见魔改记录 |
    | v2.8 | 2026-10-19 | 去掉首页、关注页、热榜、搜索页的加载失败提示（信号差时「unexpected end of stream」每回首页弹一次）；「Jev 建议」最多给 4 个关键词 |
+   | v2.9 | 2026-10-19 | 首页 / 关注 / 搜索卡片菜单「屏蔽用户」不再二次确认；页面转场改用 Material 3 emphasized 缓动（进入 250ms 减速、退出 200ms 加速）；桌面 / macOS 文章切换时长并入 `PAGE_TRANSITION_MS`；话题页简介折叠 420ms 改 300ms |
 
 ## 上游规则的取舍
 
@@ -225,7 +226,7 @@ $ADB shell svc wifi disable; $ADB shell svc data disable   # 模拟断网，测�
 - 已读标记：`FeedCard` 用 `content_open_events`（本地打开 + 同步的知乎浏览历史）在详情行前显示「3 天前读过」。
 - 屏蔽入口：账号页新增「屏蔽列表」直达入口；首页卡片「按关键词屏蔽」弹窗支持手动输入，可选「普通屏蔽词」（带匹配范围，每个词一条规则）或「AI 主题（Jev）」，点「Jev 建议」才请求 Jev 提取关键词，结果只作为可点选的建议（默认不选），弹窗底部可跳到屏蔽列表；屏蔽列表的 NLP 标签页改名「AI 屏蔽主题」。
 - 数据同步：`shared/src/androidMain/.../ui/subscreens/AndroidSubscreenRuntimes.kt` 的 `CloudFileSyncSettings`（设置 → 系统与更新）。用 SAF 选一个文件，写入两个 SharedPreferences、`account.json`、`history.json` 和两个 Room 数据库的全部表（排除离线正文和本地推荐的爬虫缓存三表）；同步 = 本机与文件合并后写回文件（冲突以本机为准），恢复 = 文件合并进本机（冲突以文件为准）后重启应用。`MainActivity` 启动时距上次成功同步超过一天会自动同步（`syncCloudFileIfDue`）。系统自动备份配置保持上游原样，曾经的 `ConfigBackupAgent` 已删除。
-- 版本号加后缀 `-jev<版本>`（当前 `-jev2.8`）；去掉设置页「交流 & 闲聊」（上游 Discord / Telegram / issue）；实验性 UI 页脚的 issue 链接、文章导出页脚的 GitHub 地址改指向本 fork（导出署名改为「知乎++ Jev」）。
+- 版本号加后缀 `-jev<版本>`（当前 `-jev2.9`）；去掉设置页「交流 & 闲聊」（上游 Discord / Telegram / issue）；实验性 UI 页脚的 issue 链接、文章导出页脚的 GitHub 地址改指向本 fork（导出署名改为「知乎++ Jev」）。
 - 文章页顶栏：`TwoRowsTopAppBar.kt` 的 `rememberContentLinkedScrollBehavior` 让折叠量等于正文滚动距离（不先消费滚动、不吸附），`ArticleScreen` 正文顶部边距固定为展开高度，顶栏覆盖在正文上折叠；原 `PreferCollapsedExitUntilCollapsedScrollBehavior` 与吸附代码已删除。很短的回答可能收不完顶栏。
 - 首页排序：设置「推荐系统与内容过滤 → 按发布时间排序」（`homeFeedSortByPublishTime`，默认开），`HomeFeedViewModel.processResponse` 把每页按 `target.created_time` 从新到旧重排（外层 `created_time` 是请求时刻，不能用）。安卓端推荐卡片实测不带任何时间字段，所以安卓端推荐不受影响、混合推荐只排网页端那部分。
 - 删除遥测（`telemetry()`、登录前第三页遥测声明、设置项）、首页在线通知（`OnlineHomeNotification`）、AIGC 标记（`AigcVoteModels`、`AigcVoteEnvironment`、文章页标记面板与菜单项、设置项）、未接入的 `CrashReporter`、防沉迷提醒（`ContinuousUsageReminderManager` 与设置项；原 `ZhihuPolicy.kt` 只剩 `expect object Log`，改名 `Log.kt`）。
@@ -271,6 +272,8 @@ $ADB shell svc wifi disable; $ADB shell svc data disable   # 模拟断网，测�
   - 「在电脑中打开」：上游会在账号里建一个描述为 `com.github.zly2006.zhplus.openinbrowser` 的私密收藏夹，等于在服务端留标记；改为直接用浏览器打开网页（与桌面端一致），菜单文字改「在浏览器中打开」。
 - 加载失败提示（v2.8）：首页、关注页（推荐 / 动态两处）、热榜、搜索页删掉了 `LaunchedEffect(viewModel.errorMessage)` 里的 Snackbar 提示；`errorMessage` 仍保留，用来触发首页离线回退、停止自动翻页和列表底部「点击重试」文字（搜索页、话题页、评论区）。因此上文「网络误报」里「连接 <域名> 失败」的提示文字现在不再弹出，只作为状态存在；评论发送 / 收藏 / 登录等用户主动操作的失败提示未动。
 - Jev 关键词数量（v2.8）：卡片「Jev 建议」的 `topN` 由 10 改为 4（`AndroidComponents.kt`；桌面端 `JvmComponents.kt` 仍是 10）。
+- 屏蔽用户免确认（v2.9）：`FeedAuthorBlockConfirmDialog`（`UiComponentSupport.kt`）对普通作者改为 `LaunchedEffect(request)` 直接写入屏蔽并回调 `onConfirm`，失败时提示并 `onDismiss`；「屏蔽提问者」的确认弹窗代码保留但现在没有入口。评论左滑屏蔽评论者、作者页屏蔽按钮的确认弹窗未动。
+- 转场（v2.9）：`ZhihuMain.kt` 的 `PAGE_TRANSITION_MS`（进入 250ms，`PageEnterEasing` 减速）与 `PAGE_EXIT_MS`（退出 200ms，`PageExitEasing` 加速），主栈和详情栏两个 `NavHost` 共用；`DesktopZhihuMain` / `MacosZhihuMain` 的文章切换原写死 300ms，改用 `PAGE_TRANSITION_MS`。模拟器软件渲染只验证了进入 / 返回功能正常，曲线手感需真机确认。整页转场仍不跟随预测性返回手势（只有底部弹层接了进度）。
 - 上游 CI（`.github/workflows`）仍按 full / lite 构建并发布到上游 release，本 fork 未改，不要直接启用。
 
 ## 已知问题与待办

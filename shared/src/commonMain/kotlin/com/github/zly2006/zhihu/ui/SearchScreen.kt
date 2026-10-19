@@ -94,7 +94,6 @@ import com.github.zly2006.zhihu.navigation.Person
 import com.github.zly2006.zhihu.navigation.Search
 import com.github.zly2006.zhihu.navigation.Topic
 import com.github.zly2006.zhihu.platform.SettingsStore
-import com.github.zly2006.zhihu.platform.UserMessageDuration
 import com.github.zly2006.zhihu.platform.rememberSettingsStore
 import com.github.zly2006.zhihu.platform.rememberUserMessageSink
 import com.github.zly2006.zhihu.ui.components.AuthorBadge

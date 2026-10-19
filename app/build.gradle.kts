@@ -60,7 +60,7 @@ android {
         versionCode = property("app.versionCode").toString().toIntOrNull() ?: 1
         versionName = property("app.versionName").toString()
         // 本 fork 自己的版本，上游版本号保留在前面，便于合并上游时对照
-        versionNameSuffix = "-jev2.8"
+        versionNameSuffix = "-jev2.9"
 
         val localProperties =
             rootProject

@@ -225,26 +225,26 @@ fun MacosZhihuMain(windowChrome: MacosWindowChromeHost? = null) {
             articleEnterTransition = {
                 when (sharedArticleAnswerSwitchState.answerTransitionDirection) {
                     ArticleAnswerTransitionDirection.VERTICAL_NEXT ->
-                        slideInVertically(tween(300)) { it } + fadeIn(tween(300))
+                        slideInVertically(tween(PAGE_TRANSITION_MS)) { it } + fadeIn(tween(PAGE_TRANSITION_MS))
                     ArticleAnswerTransitionDirection.VERTICAL_PREVIOUS ->
-                        slideInVertically(tween(300)) { -it } + fadeIn(tween(300))
+                        slideInVertically(tween(PAGE_TRANSITION_MS)) { -it } + fadeIn(tween(PAGE_TRANSITION_MS))
                     ArticleAnswerTransitionDirection.HORIZONTAL_NEXT ->
-                        slideInHorizontally(tween(300)) { it } + fadeIn(tween(300))
+                        slideInHorizontally(tween(PAGE_TRANSITION_MS)) { it } + fadeIn(tween(PAGE_TRANSITION_MS))
                     ArticleAnswerTransitionDirection.HORIZONTAL_PREVIOUS ->
-                        slideInHorizontally(tween(300)) { -it } + fadeIn(tween(300))
-                    else -> slideInHorizontally(tween(300)) { it }
+                        slideInHorizontally(tween(PAGE_TRANSITION_MS)) { -it } + fadeIn(tween(PAGE_TRANSITION_MS))
+                    else -> slideInHorizontally(tween(PAGE_TRANSITION_MS)) { it }
                 }
             },
             articleExitTransition = {
                 when (sharedArticleAnswerSwitchState.answerTransitionDirection) {
                     ArticleAnswerTransitionDirection.VERTICAL_NEXT ->
-                        slideOutVertically(tween(300)) { -it } + fadeOut(tween(300))
+                        slideOutVertically(tween(PAGE_TRANSITION_MS)) { -it } + fadeOut(tween(PAGE_TRANSITION_MS))
                     ArticleAnswerTransitionDirection.VERTICAL_PREVIOUS ->
-                        slideOutVertically(tween(300)) { it } + fadeOut(tween(300))
+                        slideOutVertically(tween(PAGE_TRANSITION_MS)) { it } + fadeOut(tween(PAGE_TRANSITION_MS))
                     ArticleAnswerTransitionDirection.HORIZONTAL_NEXT ->
-                        slideOutHorizontally(tween(300)) { -it } + fadeOut(tween(300))
+                        slideOutHorizontally(tween(PAGE_TRANSITION_MS)) { -it } + fadeOut(tween(PAGE_TRANSITION_MS))
                     ArticleAnswerTransitionDirection.HORIZONTAL_PREVIOUS ->
-                        slideOutHorizontally(tween(300)) { it } + fadeOut(tween(300))
+                        slideOutHorizontally(tween(PAGE_TRANSITION_MS)) { it } + fadeOut(tween(PAGE_TRANSITION_MS))
                     else -> ExitTransition.None
                 }
             },

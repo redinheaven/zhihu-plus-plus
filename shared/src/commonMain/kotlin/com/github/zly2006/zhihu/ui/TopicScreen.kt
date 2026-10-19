@@ -663,7 +663,7 @@ private fun TopicIntroduction(
                 .fillMaxWidth()
                 .clipToBounds()
                 .animateContentSize(
-                    animationSpec = tween(durationMillis = 420, easing = FastOutSlowInEasing),
+                    animationSpec = tween(durationMillis = 300, easing = FastOutSlowInEasing),
                 ),
     ) {
         Text(

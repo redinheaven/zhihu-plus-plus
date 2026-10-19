@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import com.github.zly2006.zhihu.data.DataHolder
 import com.github.zly2006.zhihu.data.FeedDisplayItem
+import com.github.zly2006.zhihu.data.target
 import com.github.zly2006.zhihu.nlp.KeywordWithWeight
 import com.github.zly2006.zhihu.platform.rememberImageSaver
 import com.github.zly2006.zhihu.platform.rememberImageSharer
@@ -144,8 +145,32 @@ fun FeedAuthorBlockConfirmDialog(
         }
     }
 
+    // 屏蔽普通作者不再二次确认：菜单点击即屏蔽
+    LaunchedEffect(request) {
+        if (request?.type != FeedAuthorBlockType.CONTENT_AUTHOR) return@LaunchedEffect
+        val author = displayItems.asSequence().mapNotNull { it.feed?.target?.author }.firstOrNull { it.id == request.userId }
+        try {
+            database.blockedUserDao().insertUser(
+                BlockedUser(
+                    userId = request.userId,
+                    userName = author?.name ?: request.userName,
+                    urlToken = author?.urlToken,
+                    avatarUrl = author?.avatarUrl,
+                ),
+            )
+            onConfirm()
+            userMessages.showShortMessage("已屏蔽用户：${request.userName}")
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.e("FeedBlocking", "Failed to block feed author", e)
+            userMessages.showShortMessage("屏蔽失败: ${e.message}")
+            onDismiss()
+        }
+    }
+
     FeedAuthorBlockConfirmDialogContent(
-        request = request,
+        request = request?.takeIf { it.type == FeedAuthorBlockType.QUESTION_AUTHOR },
         displayItems = displayItems,
         questionAuthorStats = questionAuthorStats,
         isQuestionAuthorStatsLoading = isQuestionAuthorStatsLoading,

@@ -21,6 +21,7 @@ import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
+import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -171,8 +172,13 @@ private sealed class MainTabPage(
 
 internal val LocalArticleNavController = staticCompositionLocalOf<NavHostController?> { null }
 
-/** 页面进出的横滑时长 */
+/** 页面进入的横滑时长；退出更短（[PAGE_EXIT_MS]），符合 Material「退出比进入快」 */
 const val PAGE_TRANSITION_MS = 250
+const val PAGE_EXIT_MS = 200
+
+/** Material 3 emphasized decelerate / accelerate：进入先快后慢，退出先慢后快 */
+val PageEnterEasing = CubicBezierEasing(0.05f, 0.7f, 0.1f, 1f)
+val PageExitEasing = CubicBezierEasing(0.3f, 0f, 0.8f, 0.15f)
 
 /**
  * Zhihu++ 的共享应用主壳。
@@ -454,10 +460,13 @@ fun ZhihuMain(
                 navController = detailNavController,
                 startDestination = EmptyDetail,
                 modifier = modifier.testTag("detail_pane"),
-                enterTransition = { slideInHorizontally(tween(PAGE_TRANSITION_MS)) { it } },
-                exitTransition = { slideOutHorizontally(tween(PAGE_TRANSITION_MS)) { -it / 5 } },
-                popEnterTransition = { slideInHorizontally(tween(PAGE_TRANSITION_MS)) { -it / 5 } },
-                popExitTransition = { slideOutHorizontally(tween(PAGE_TRANSITION_MS)) { it } + fadeOut(tween(PAGE_TRANSITION_MS)) },
+                enterTransition = { slideInHorizontally(tween(PAGE_TRANSITION_MS, easing = PageEnterEasing)) { it } },
+                exitTransition = { slideOutHorizontally(tween(PAGE_EXIT_MS, easing = PageExitEasing)) { -it / 5 } },
+                popEnterTransition = { slideInHorizontally(tween(PAGE_TRANSITION_MS, easing = PageEnterEasing)) { -it / 5 } },
+                popExitTransition = {
+                    slideOutHorizontally(tween(PAGE_EXIT_MS, easing = PageExitEasing)) { it } +
+                        fadeOut(tween(PAGE_EXIT_MS, easing = PageExitEasing))
+                },
             ) {
                 composable<EmptyDetail> {
                     EmptyDetailPane()
@@ -592,17 +601,18 @@ fun ZhihuMain(
                             navController,
                             startDestination = MainTabs,
                             enterTransition = {
-                                slideInHorizontally(tween(PAGE_TRANSITION_MS)) { it }
+                                slideInHorizontally(tween(PAGE_TRANSITION_MS, easing = PageEnterEasing)) { it }
                             },
                             // 下层页面跟着轻微位移（视差），比静止不动更接近系统原生的切页手感
                             exitTransition = {
-                                slideOutHorizontally(tween(PAGE_TRANSITION_MS)) { -it / 5 }
+                                slideOutHorizontally(tween(PAGE_EXIT_MS, easing = PageExitEasing)) { -it / 5 }
                             },
                             popEnterTransition = {
-                                slideInHorizontally(tween(PAGE_TRANSITION_MS)) { -it / 5 }
+                                slideInHorizontally(tween(PAGE_TRANSITION_MS, easing = PageEnterEasing)) { -it / 5 }
                             },
                             popExitTransition = {
-                                slideOutHorizontally(tween(PAGE_TRANSITION_MS)) { it } + fadeOut(tween(PAGE_TRANSITION_MS))
+                                slideOutHorizontally(tween(PAGE_EXIT_MS, easing = PageExitEasing)) { it } +
+                                    fadeOut(tween(PAGE_EXIT_MS, easing = PageExitEasing))
                             },
                         ) {
                             composable<MainTabs> {
